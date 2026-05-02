@@ -263,11 +263,27 @@ ENVIRONMENT=development
       - `pytest` を実行し全テストが通ることを確認
 
 - [ ] **ステップ 2: ドメインモデル（Discord 非依存）**
-  - `services/song_repository.py`（部分一致検索、画像パス解決）
-  - `services/task.py` + `services/task_generator.py`（all_topics.json から N 個サンプリング）
-  - `services/task_evaluator.py`（type ごとの判定関数辞書 + 評価ループ）
-  - `services/session.py`, `services/session_manager.py`
-  - テスト: 全て `tests/services/test_*.py`
+  - 変更範囲が広いため以下に細分化する。各サブステップ完了時にチェックを更新する。依存関係の上流から順に実施
+    - [x] **2.1: 楽曲データドメイン**
+      - [src/services/song_repository.py](src/services/song_repository.py): `Song` データクラス（楽曲名 / shelf / book / version / time / composer / feat / 難易度別 level・notes 辞書）と `SongRepository`（[assets/data/all_songs.json](assets/data/all_songs.json) ロード、部分一致検索、楽曲名→画像パス解決）
+      - テスト: [tests/services/test_song_repository.py](tests/services/test_song_repository.py)（実 JSON を用いたロード・部分一致・画像パス解決）
+    - [ ] **2.2: PlayRecord と Task のモデル**
+      - [src/services/session.py](src/services/session.py) に `PlayRecord`（song_name / difficulty / charming / combo）
+      - [src/services/task.py](src/services/task.py) に `Task`（type / set_value / value / current / cleared）
+      - いずれもロジックを最小限に留めたデータモデル
+      - テスト: [tests/services/test_task.py](tests/services/test_task.py)（進捗・クリア判定の振る舞い）。`PlayRecord` の検証は 2.5 のセッションテストに含める
+    - [ ] **2.3: TaskGenerator**
+      - [src/services/task_generator.py](src/services/task_generator.py): [assets/data/all_topics.json](assets/data/all_topics.json) から N 個ランダム生成。type の重複可否、`set` / `value` のサンプリング規則を実装
+      - テスト: [tests/services/test_task_generator.py](tests/services/test_task_generator.py)
+    - [ ] **2.4: TaskEvaluator**
+      - [src/services/task_evaluator.py](src/services/task_evaluator.py): type ごとの評価関数を辞書で保持し、`evaluate(task, play_record, all_plays, song_repo)` で判定
+      - 全 type に対応（title_*, level, level_total, result_*_total, notes_*, composer_*, time_*, version, book, shelf, difficult, featuring）
+      - テスト: [tests/services/test_task_evaluator.py](tests/services/test_task_evaluator.py)（type ごとの代表ケース）
+    - [ ] **2.5: Session と SessionManager**
+      - [src/services/session.py](src/services/session.py) に `Session`（タスク / プレイ履歴 / 回答履歴 / 開始時刻 / チャンネル / 所有者など）
+      - [src/services/session_manager.py](src/services/session_manager.py): シングルトン（`_current: Session | None`）。`start()` / `end()` / `reset()` / `current()` を提供
+      - **タイマー処理は Discord 依存があるためステップ4以降に回し、本ステップではセッションオブジェクトの登録・取得・解放のみ実装する**
+      - テスト: [tests/services/test_session.py](tests/services/test_session.py), [tests/services/test_session_manager.py](tests/services/test_session_manager.py)
 
 - [ ] **ステップ 3: 画像処理**
   - `services/image_processor.py`（Pillow でパネル合成 + 効果）
