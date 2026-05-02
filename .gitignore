@@ -130,3 +130,9 @@ CLAUDE.md
 .coverage
 htmlcov/
 .cache/
+
+
+# ============================
+# データ
+# ============================
+assets/images
