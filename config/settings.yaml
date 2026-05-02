@@ -1,0 +1,21 @@
+# 共通設定
+# 開発環境 (本番、開発、テスト) で異なる変数は、それぞれの設定ファイル(.yaml)で処理する
+
+
+project_name: "template"
+version: "1.0.0"
+
+
+# src/core/logger.py
+logger:
+
+  # 必須項目
+  console_level: "DEBUG"
+  file_level: "DEBUG"
+  format: "[%(asctime)s] %(levelname)s: [%(filename)s-%(lineno)d] --> %(message)s"
+
+  # オプション項目（デフォルト値あり）
+  log_dir: "logs"
+  log_file: "python.log"
+  max_bytes: 10485760  # 10MB
+  backup_count: 5

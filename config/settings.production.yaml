@@ -1,0 +1,7 @@
+# 本番環境の設定（settings.yamlの設定を上書き）
+
+
+# src/core/logger.py
+logger:
+  console_level: "WARNING"  # 本番では重大な問題のみ表示
+  file_level: "INFO"  # ファイルには運用に必要な情報を記録

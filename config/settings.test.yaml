@@ -1,0 +1,7 @@
+# テスト環境の設定（settings.yamlの設定を上書き）
+
+
+# src/core/logger.py
+logger:
+  console_level: "INFO"
+  file_level: "DEBUG"
