@@ -4,10 +4,11 @@
 このモジュールはYAMLファイルから設定を読み込み、型安全性を保証します。
 """
 
+import math
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from utils.helpers import get_absolute_path, load_yaml, merge_dicts
 
@@ -57,6 +58,111 @@ class LoggerConfig(BaseModel):
     @field_validator("log_dir", mode="before")
     @classmethod
     def resolve_log_dir(cls, v: object) -> Path:
+        return get_absolute_path(str(v))
+
+
+class DiscordConfig(BaseModel):
+    """
+    Discord Bot 動作に必要な設定を包含するモデル
+
+    セッションのタイムアウトや通知先チャンネル ID などを保持します。
+    `command_sync_guilds` が空の場合はグローバルにスラッシュコマンドを登録します。
+    """
+
+    # 必須項目（既定値あり）
+    session_timeout_minutes: int = 30
+    warning_minutes_before_end: int = 10
+
+    # オプション項目
+    command_sync_guilds: list[int] = []
+    log_channel_id: Optional[int] = None
+    result_channel_id: Optional[int] = None
+
+    @field_validator("session_timeout_minutes", "warning_minutes_before_end")
+    @classmethod
+    def must_be_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError(f"1以上の整数を指定してください: {v}")
+        return v
+
+    @model_validator(mode="after")
+    def warning_must_be_less_than_timeout(self) -> "DiscordConfig":
+        if self.warning_minutes_before_end >= self.session_timeout_minutes:
+            raise ValueError(
+                "warning_minutes_before_end は session_timeout_minutes より小さい必要があります "
+                f"(warning={self.warning_minutes_before_end}, timeout={self.session_timeout_minutes})"
+            )
+        return self
+
+
+class SessionConfig(BaseModel):
+    """
+    ゲームセッションの進行に関わる設定を包含するモデル
+
+    パネル枚数の選択肢、デフォルト値、モザイクレベル(ラベル→block画素数)を保持します。
+    """
+
+    default_panel_count: int = 9
+    allowed_panel_counts: list[int] = [4, 9, 16, 25]
+    mosaic_levels: dict[str, int] = {
+        "なし": 300,
+        "弱": 150,
+        "中": 90,
+        "強": 45,
+        "最強": 27,
+    }
+
+    @field_validator("allowed_panel_counts")
+    @classmethod
+    def must_all_be_perfect_squares(cls, v: list[int]) -> list[int]:
+        if not v:
+            raise ValueError("allowed_panel_counts は空にできません")
+        for n in v:
+            if n <= 0:
+                raise ValueError(f"パネル数は正の整数で指定してください: {n}")
+            root = int(math.isqrt(n))
+            if root * root != n:
+                raise ValueError(f"パネル数は平方数(N×N)で指定してください: {n}")
+        return v
+
+    @field_validator("mosaic_levels")
+    @classmethod
+    def mosaic_block_must_be_positive(cls, v: dict[str, int]) -> dict[str, int]:
+        if not v:
+            raise ValueError("mosaic_levels は空にできません")
+        for label, block in v.items():
+            if block <= 0:
+                raise ValueError(
+                    f"モザイクの block 画素数は正の整数で指定してください: {label}={block}"
+                )
+        return v
+
+    @model_validator(mode="after")
+    def default_must_be_in_allowed(self) -> "SessionConfig":
+        if self.default_panel_count not in self.allowed_panel_counts:
+            raise ValueError(
+                "default_panel_count は allowed_panel_counts に含まれる値である必要があります "
+                f"(default={self.default_panel_count}, allowed={self.allowed_panel_counts})"
+            )
+        return self
+
+
+class AssetsConfig(BaseModel):
+    """
+    素材ファイル(楽曲データ・お題定義・楽曲ジャケット画像)のパスを包含するモデル
+
+    YAML 上では相対パスで記述し、読み込み時にプロジェクトルートからの絶対パスに解決します。
+    """
+
+    songs_json: Path
+    topics_json: Path
+    images_dir: Path
+
+    @field_validator("songs_json", "topics_json", "images_dir", mode="before")
+    @classmethod
+    def resolve_to_absolute(cls, v: object) -> Path:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            raise ValueError("素材パスは空にできません")
         return get_absolute_path(str(v))
 
 
@@ -141,6 +247,45 @@ class Config:
         logger_config: dict = self.raw_config.get("logger", {})
         return LoggerConfig(**logger_config)
 
+    def get_discord_config(self) -> DiscordConfig:
+        """
+        Discord Bot 設定を取得
+
+        Returns:
+            DiscordConfig: Discord 関連設定オブジェクト
+
+        Raises:
+            pydantic.ValidationError: 設定値が不正な場合
+        """
+        discord_config: dict = self.raw_config.get("discord", {})
+        return DiscordConfig(**discord_config)
+
+    def get_session_config(self) -> SessionConfig:
+        """
+        セッション・ゲーム進行設定を取得
+
+        Returns:
+            SessionConfig: セッション関連設定オブジェクト
+
+        Raises:
+            pydantic.ValidationError: 設定値が不正な場合
+        """
+        session_config: dict = self.raw_config.get("session", {})
+        return SessionConfig(**session_config)
+
+    def get_assets_config(self) -> AssetsConfig:
+        """
+        素材ファイルパス設定を取得
+
+        Returns:
+            AssetsConfig: 素材パス設定オブジェクト
+
+        Raises:
+            pydantic.ValidationError: 必須項目が設定されていない場合
+        """
+        assets_config: dict = self.raw_config.get("assets", {})
+        return AssetsConfig(**assets_config)
+
 
 # ==================================================
 # グローバル環境管理
@@ -211,3 +356,51 @@ def get_logger_config(environment: Optional[str] = None) -> LoggerConfig:
         pydantic.ValidationError: 必須項目が設定されていない場合
     """
     return get_config(environment=environment).get_logger_config()
+
+
+def get_discord_config(environment: Optional[str] = None) -> DiscordConfig:
+    """
+    Discord Bot 設定を取得
+
+    Args:
+        environment: 環境名 (development, production, test)。Noneの場合は現在の環境を使用
+
+    Returns:
+        DiscordConfig: Discord 関連設定オブジェクト
+
+    Raises:
+        pydantic.ValidationError: 設定値が不正な場合
+    """
+    return get_config(environment=environment).get_discord_config()
+
+
+def get_session_config(environment: Optional[str] = None) -> SessionConfig:
+    """
+    セッション・ゲーム進行設定を取得
+
+    Args:
+        environment: 環境名 (development, production, test)。Noneの場合は現在の環境を使用
+
+    Returns:
+        SessionConfig: セッション関連設定オブジェクト
+
+    Raises:
+        pydantic.ValidationError: 設定値が不正な場合
+    """
+    return get_config(environment=environment).get_session_config()
+
+
+def get_assets_config(environment: Optional[str] = None) -> AssetsConfig:
+    """
+    素材ファイルパス設定を取得
+
+    Args:
+        environment: 環境名 (development, production, test)。Noneの場合は現在の環境を使用
+
+    Returns:
+        AssetsConfig: 素材パス設定オブジェクト
+
+    Raises:
+        pydantic.ValidationError: 必須項目が設定されていない場合
+    """
+    return get_config(environment=environment).get_assets_config()

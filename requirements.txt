@@ -1,8 +1,10 @@
 annotated-types==0.7.0
 colorama==0.4.6
 coverage==7.13.4
+discord.py>=2.4
 iniconfig==2.3.0
 packaging==26.0
+Pillow>=10
 pluggy==1.6.0
 pydantic==2.12.5
 pydantic_core==2.41.5

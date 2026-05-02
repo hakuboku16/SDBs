@@ -248,10 +248,19 @@ ENVIRONMENT=development
   - 本ドキュメントを作成し、リポジトリに永続化（本ファイル）
   - 以降の実装の単一の参照源とする
 
-- [ ] **ステップ 1: 依存と設定の土台**
-  - `requirements.txt`, `.env.example`, `config/settings.yaml` 拡張
-  - `src/core/config.py` に `DiscordConfig` / `SessionConfig` / `AssetsConfig` Pydantic モデル追加
-  - テスト: [tests/core/test_config.py](tests/core/test_config.py) に新モデルのバリデーション
+- [x] **ステップ 1: 依存と設定の土台**
+  - 変更範囲が広いため以下に細分化する。各サブステップ完了時にチェックを更新する
+    - [x] **1.1: 依存パッケージと環境変数**
+      - [requirements.txt](requirements.txt) に `discord.py>=2.4`, `Pillow>=10` を追加
+      - [.env.example](.env.example) に `DISCORD_TOKEN=` を追加
+    - [x] **1.2: settings.yaml の拡張**
+      - [config/settings.yaml](config/settings.yaml) に `discord` / `session` / `assets` セクションを追加（[設定](#設定)節の内容に準拠）
+    - [x] **1.3: Pydantic モデル追加**
+      - [src/core/config.py](src/core/config.py) に `DiscordConfig` / `SessionConfig` / `AssetsConfig` を追加
+      - `Config.get_discord_config()` / `get_session_config()` / `get_assets_config()` メソッドと、対応するモジュール関数 `get_discord_config()` / `get_session_config()` / `get_assets_config()` を追加
+    - [x] **1.4: テスト追加・実行**
+      - [tests/core/test_config.py](tests/core/test_config.py) に新モデルのバリデーションテストと `get_*_config` のテストを追加
+      - `pytest` を実行し全テストが通ることを確認
 
 - [ ] **ステップ 2: ドメインモデル（Discord 非依存）**
   - `services/song_repository.py`（部分一致検索、画像パス解決）

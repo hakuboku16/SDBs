@@ -1,7 +1,8 @@
 """
 config.py のユニットテスト
 
-LoggerConfig, Config, set_environment などの動作をテストします。
+LoggerConfig, DiscordConfig, SessionConfig, AssetsConfig, Config,
+set_environment などの動作をテストします。
 """
 
 from pathlib import Path
@@ -11,7 +12,12 @@ import pytest
 from pydantic import ValidationError
 
 from src.core import config as config_module
-from src.core.config import LoggerConfig
+from src.core.config import (
+    AssetsConfig,
+    DiscordConfig,
+    LoggerConfig,
+    SessionConfig,
+)
 
 
 class TestLoggerConfig:
@@ -84,6 +90,196 @@ class TestLoggerConfig:
         assert result.backup_count == 5
 
 
+class TestDiscordConfig:
+    """
+    DiscordConfig (Pydantic モデル) のテスト
+    """
+
+    def test_validate_success_with_defaults(self):
+        """
+        既定値のみで DiscordConfig が生成される
+        """
+        result = DiscordConfig()
+        assert result.session_timeout_minutes == 30
+        assert result.warning_minutes_before_end == 10
+        assert result.command_sync_guilds == []
+        assert result.log_channel_id is None
+        assert result.result_channel_id is None
+
+    def test_validate_success_with_all_fields(self):
+        """
+        全項目を指定して DiscordConfig が生成される
+        """
+        result = DiscordConfig(
+            session_timeout_minutes=60,
+            warning_minutes_before_end=15,
+            command_sync_guilds=[111, 222],
+            log_channel_id=333,
+            result_channel_id=444,
+        )
+        assert result.session_timeout_minutes == 60
+        assert result.warning_minutes_before_end == 15
+        assert result.command_sync_guilds == [111, 222]
+        assert result.log_channel_id == 333
+        assert result.result_channel_id == 444
+
+    def test_validate_non_positive_timeout(self):
+        """
+        session_timeout_minutes が 0 以下の場合は ValidationError
+        """
+        with pytest.raises(ValidationError):
+            DiscordConfig(session_timeout_minutes=0, warning_minutes_before_end=1)
+
+    def test_validate_non_positive_warning(self):
+        """
+        warning_minutes_before_end が 0 以下の場合は ValidationError
+        """
+        with pytest.raises(ValidationError):
+            DiscordConfig(session_timeout_minutes=10, warning_minutes_before_end=0)
+
+    def test_validate_warning_ge_timeout(self):
+        """
+        warning_minutes_before_end が session_timeout_minutes 以上の場合は ValidationError
+        """
+        with pytest.raises(ValidationError):
+            DiscordConfig(session_timeout_minutes=10, warning_minutes_before_end=10)
+
+        with pytest.raises(ValidationError):
+            DiscordConfig(session_timeout_minutes=10, warning_minutes_before_end=20)
+
+
+class TestSessionConfig:
+    """
+    SessionConfig (Pydantic モデル) のテスト
+    """
+
+    def test_validate_success_with_defaults(self):
+        """
+        既定値のみで SessionConfig が生成される
+        """
+        result = SessionConfig()
+        assert result.default_panel_count == 9
+        assert result.allowed_panel_counts == [4, 9, 16, 25]
+        assert result.mosaic_levels == {
+            "なし": 300,
+            "弱": 150,
+            "中": 90,
+            "強": 45,
+            "最強": 27,
+        }
+
+    def test_validate_success_with_custom_values(self):
+        """
+        値を指定して SessionConfig が生成される
+        """
+        result = SessionConfig(
+            default_panel_count=4,
+            allowed_panel_counts=[4, 16],
+            mosaic_levels={"none": 100, "strong": 20},
+        )
+        assert result.default_panel_count == 4
+        assert result.allowed_panel_counts == [4, 16]
+        assert result.mosaic_levels == {"none": 100, "strong": 20}
+
+    def test_validate_default_not_in_allowed(self):
+        """
+        default_panel_count が allowed_panel_counts に含まれない場合は ValidationError
+        """
+        with pytest.raises(ValidationError):
+            SessionConfig(default_panel_count=9, allowed_panel_counts=[4, 16])
+
+    def test_validate_allowed_contains_non_square(self):
+        """
+        allowed_panel_counts に平方数でない値が含まれる場合は ValidationError
+        """
+        with pytest.raises(ValidationError):
+            SessionConfig(default_panel_count=4, allowed_panel_counts=[4, 10])
+
+    def test_validate_allowed_contains_non_positive(self):
+        """
+        allowed_panel_counts に 0 以下の値が含まれる場合は ValidationError
+        """
+        with pytest.raises(ValidationError):
+            SessionConfig(default_panel_count=4, allowed_panel_counts=[0, 4])
+
+    def test_validate_allowed_empty(self):
+        """
+        allowed_panel_counts が空の場合は ValidationError
+        """
+        with pytest.raises(ValidationError):
+            SessionConfig(default_panel_count=4, allowed_panel_counts=[])
+
+    def test_validate_mosaic_block_non_positive(self):
+        """
+        mosaic_levels の block 画素数が 0 以下の場合は ValidationError
+        """
+        with pytest.raises(ValidationError):
+            SessionConfig(mosaic_levels={"なし": 0})
+
+    def test_validate_mosaic_levels_empty(self):
+        """
+        mosaic_levels が空の場合は ValidationError
+        """
+        with pytest.raises(ValidationError):
+            SessionConfig(mosaic_levels={})
+
+
+class TestAssetsConfig:
+    """
+    AssetsConfig (Pydantic モデル) のテスト
+    """
+
+    def test_validate_success_resolves_to_absolute(self):
+        """
+        相対パスが get_absolute_path によって絶対パスに解決される
+        """
+        result = AssetsConfig(
+            songs_json="assets/data/all_songs.json",
+            topics_json="assets/data/all_topics.json",
+            images_dir="assets/images",
+        )
+        assert isinstance(result.songs_json, Path)
+        assert result.songs_json.is_absolute()
+        assert result.songs_json.name == "all_songs.json"
+        assert isinstance(result.topics_json, Path)
+        assert result.topics_json.is_absolute()
+        assert result.topics_json.name == "all_topics.json"
+        assert isinstance(result.images_dir, Path)
+        assert result.images_dir.is_absolute()
+        assert result.images_dir.name == "images"
+
+    def test_validate_missing_required(self):
+        """
+        必須項目が欠落している場合は ValidationError
+        """
+        with pytest.raises(ValidationError):
+            AssetsConfig.model_validate({"songs_json": "assets/data/all_songs.json"})
+
+    def test_validate_empty_string(self):
+        """
+        必須項目が空文字列の場合は ValidationError
+        """
+        with pytest.raises(ValidationError):
+            AssetsConfig(
+                songs_json="",
+                topics_json="assets/data/all_topics.json",
+                images_dir="assets/images",
+            )
+
+    def test_validate_none_value(self):
+        """
+        必須項目に None が指定された場合は ValidationError
+        """
+        with pytest.raises(ValidationError):
+            AssetsConfig.model_validate(
+                {
+                    "songs_json": None,
+                    "topics_json": "assets/data/all_topics.json",
+                    "images_dir": "assets/images",
+                }
+            )
+
+
 class TestConfig:
     """
     Config クラスのテスト
@@ -149,6 +345,106 @@ class TestConfig:
         with pytest.raises(ValidationError):
             conf.get_logger_config()
 
+    def test_get_discord_config(self):
+        """
+        get_discord_config() が DiscordConfig インスタンスを返す
+        """
+        conf = config_module.Config()
+        conf.raw_config = {
+            "discord": {
+                "session_timeout_minutes": 30,
+                "warning_minutes_before_end": 10,
+                "command_sync_guilds": [111],
+                "log_channel_id": 222,
+                "result_channel_id": 333,
+            }
+        }
+        result = conf.get_discord_config()
+        assert isinstance(result, DiscordConfig)
+        assert result.session_timeout_minutes == 30
+        assert result.command_sync_guilds == [111]
+
+    def test_get_discord_config_with_empty_section(self):
+        """
+        discord セクションが無い場合でも既定値で生成される
+        """
+        conf = config_module.Config()
+        conf.raw_config = {}
+        result = conf.get_discord_config()
+        assert isinstance(result, DiscordConfig)
+        assert result.session_timeout_minutes == 30
+
+    def test_get_discord_config_invalid(self):
+        """
+        Discord 設定が不正な場合は ValidationError
+        """
+        conf = config_module.Config()
+        conf.raw_config = {
+            "discord": {
+                "session_timeout_minutes": 5,
+                "warning_minutes_before_end": 10,
+            }
+        }
+        with pytest.raises(ValidationError):
+            conf.get_discord_config()
+
+    def test_get_session_config(self):
+        """
+        get_session_config() が SessionConfig インスタンスを返す
+        """
+        conf = config_module.Config()
+        conf.raw_config = {
+            "session": {
+                "default_panel_count": 9,
+                "allowed_panel_counts": [4, 9, 16, 25],
+                "mosaic_levels": {"なし": 300, "強": 45},
+            }
+        }
+        result = conf.get_session_config()
+        assert isinstance(result, SessionConfig)
+        assert result.default_panel_count == 9
+        assert result.mosaic_levels["強"] == 45
+
+    def test_get_session_config_invalid(self):
+        """
+        セッション設定が不正な場合は ValidationError
+        """
+        conf = config_module.Config()
+        conf.raw_config = {
+            "session": {
+                "default_panel_count": 9,
+                "allowed_panel_counts": [4, 16],
+            }
+        }
+        with pytest.raises(ValidationError):
+            conf.get_session_config()
+
+    def test_get_assets_config(self):
+        """
+        get_assets_config() が AssetsConfig インスタンスを返し、絶対パスに解決される
+        """
+        conf = config_module.Config()
+        conf.raw_config = {
+            "assets": {
+                "songs_json": "assets/data/all_songs.json",
+                "topics_json": "assets/data/all_topics.json",
+                "images_dir": "assets/images",
+            }
+        }
+        result = conf.get_assets_config()
+        assert isinstance(result, AssetsConfig)
+        assert result.songs_json.is_absolute()
+        assert result.images_dir.is_absolute()
+
+    def test_get_assets_config_missing_required(self):
+        """
+        assets セクションが空の場合は ValidationError
+        """
+        conf = config_module.Config()
+        conf.raw_config = {"assets": {}}
+        with pytest.raises(ValidationError):
+            conf.get_assets_config()
+
 
 class TestGlobalEnvironment:
     """
@@ -205,3 +501,39 @@ class TestHelperFunctions:
 
         config_module.get_logger_config("test")
         assert mock_conf.get_logger_config.called
+
+    @patch("src.core.config.get_config")
+    def test_get_discord_config(self, mock_get_config):
+        """
+        get_discord_config() が get_config().get_discord_config() を呼ぶ
+        """
+        from unittest.mock import MagicMock
+        mock_conf = MagicMock()
+        mock_get_config.return_value = mock_conf
+
+        config_module.get_discord_config("test")
+        assert mock_conf.get_discord_config.called
+
+    @patch("src.core.config.get_config")
+    def test_get_session_config(self, mock_get_config):
+        """
+        get_session_config() が get_config().get_session_config() を呼ぶ
+        """
+        from unittest.mock import MagicMock
+        mock_conf = MagicMock()
+        mock_get_config.return_value = mock_conf
+
+        config_module.get_session_config("test")
+        assert mock_conf.get_session_config.called
+
+    @patch("src.core.config.get_config")
+    def test_get_assets_config(self, mock_get_config):
+        """
+        get_assets_config() が get_config().get_assets_config() を呼ぶ
+        """
+        from unittest.mock import MagicMock
+        mock_conf = MagicMock()
+        mock_get_config.return_value = mock_conf
+
+        config_module.get_assets_config("test")
+        assert mock_conf.get_assets_config.called
