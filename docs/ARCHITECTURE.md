@@ -267,7 +267,7 @@ ENVIRONMENT=development
     - [x] **2.1: 楽曲データドメイン**
       - [src/services/song_repository.py](src/services/song_repository.py): `Song` データクラス（楽曲名 / shelf / book / version / time / composer / feat / 難易度別 level・notes 辞書）と `SongRepository`（[assets/data/all_songs.json](assets/data/all_songs.json) ロード、部分一致検索、楽曲名→画像パス解決）
       - テスト: [tests/services/test_song_repository.py](tests/services/test_song_repository.py)（実 JSON を用いたロード・部分一致・画像パス解決）
-    - [ ] **2.2: PlayRecord と Task のモデル**
+    - [x] **2.2: PlayRecord と Task のモデル**
       - [src/services/session.py](src/services/session.py) に `PlayRecord`（song_name / difficulty / charming / combo）
       - [src/services/task.py](src/services/task.py) に `Task`（type / set_value / value / current / cleared）
       - いずれもロジックを最小限に留めたデータモデル
