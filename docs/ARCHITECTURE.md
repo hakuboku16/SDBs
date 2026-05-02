@@ -272,7 +272,7 @@ ENVIRONMENT=development
       - [src/services/task.py](src/services/task.py) に `Task`（type / set_value / value / current / cleared）
       - いずれもロジックを最小限に留めたデータモデル
       - テスト: [tests/services/test_task.py](tests/services/test_task.py)（進捗・クリア判定の振る舞い）。`PlayRecord` の検証は 2.5 のセッションテストに含める
-    - [ ] **2.3: TaskGenerator**
+    - [x] **2.3: TaskGenerator**
       - [src/services/task_generator.py](src/services/task_generator.py): [assets/data/all_topics.json](assets/data/all_topics.json) から N 個ランダム生成。type の重複可否、`set` / `value` のサンプリング規則を実装
       - テスト: [tests/services/test_task_generator.py](tests/services/test_task_generator.py)
     - [ ] **2.4: TaskEvaluator**
