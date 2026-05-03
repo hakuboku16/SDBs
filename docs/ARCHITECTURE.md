@@ -304,7 +304,7 @@ ENVIRONMENT=development
       - 出力は PNG 形式の `BytesIO`（discord.py の `discord.File` に直接渡せる形）
       - テスト: 出力 PNG サイズが元画像と一致、cleared 指定枚数分のパネルだけが剥がれていること、エラーケース（不正引数）
 
-- [ ] **ステップ 4: Bot とログ通知基盤**
+- [x] **ステップ 4: Bot とログ通知基盤**
   - 変更範囲が広いため以下に細分化する。各サブステップ完了時にチェックを更新する。依存関係の上流から順に実施
     - [x] **4.1: DiscordNotifier の実装**
       - [src/services/discord_notifier.py](src/services/discord_notifier.py): `DiscordNotifier` クラスを実装
@@ -321,7 +321,7 @@ ENVIRONMENT=development
         - `DiscordNotifier` インスタンスは Bot 属性 (`self.notifier`) として保持し各 cog から参照可能にする
       - テスト: [tests/core/test_bot.py](tests/core/test_bot.py)（`setup_hook` の cog ロード処理を mock 経由で確認、`on_app_command_error` が notifier を呼ぶこと）
       - `src/cogs/__init__.py` を空ファイルで作成（パッケージ化のみ。実 cog はステップ5で追加）
-    - [ ] **4.3: main.py を Bot 起動仕様に変更**
+    - [x] **4.3: main.py を Bot 起動仕様に変更**
       - [src/main.py](src/main.py): 環境変数 `DISCORD_TOKEN` をロードし、`SDBsBot(...).run(token)` する起動処理に書き換え
       - 既存の [tests/test_main.py](tests/test_main.py) を新仕様に合わせて更新（`Bot.run` を mock し、token 未設定時に意味のあるエラーで終了することを確認）
       - `pytest` 全件パスを確認

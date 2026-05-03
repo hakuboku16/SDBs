@@ -2,19 +2,36 @@
 メインエントリーポイント
 
 このファイルがアプリケーションの起点となります。
-設定の読み込みとログの初期化を行った後、メインの処理を実行します。
+.env と設定の読み込み・ロガー初期化を経て `SDBsBot` を起動します。
 """
 
 import argparse
+import sys
 from os import getenv
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-from core.config import get_config, set_environment
-from core.logger import setup_logger
-from utils.helpers import get_absolute_path
+# ==================================================
+# import path bootstrap
+# ==================================================
+# `python src/main.py` のように直接実行された場合、Python は src/ のみを
+# sys.path に追加するため、`src.core.bot` 形式の絶対インポートが解決できません。
+# 既存コードが `core.X` 形式 (src/ 起点) と `src.core.X` 形式の両方を使っているため、
+# プロジェクトルートを sys.path 先頭に挿入することで両方を解決可能にします。
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from core.config import get_config, get_discord_config, set_environment  # noqa: E402
+from core.logger import setup_logger  # noqa: E402
+from src.core.bot import SDBsBot  # noqa: E402
+from utils.helpers import get_absolute_path  # noqa: E402
 
 
+# ==================================================
+# 環境変数 / 環境名の解決
+# ==================================================
 def ensure_env_loaded() -> None:
     """
     ローカル開発用に .env が存在すれば読み込む
@@ -57,40 +74,74 @@ def get_environment() -> str:
     return "development"
 
 
+def get_discord_token() -> str:
+    """
+    Discord Bot トークンを環境変数から取得する
+
+    .env を読み込んだ上で `DISCORD_TOKEN` を解決します。未設定や空文字の場合は
+    意味のあるメッセージで `RuntimeError` を送出します
+    (要件: 「エラーは握りつぶさず、意味のあるメッセージ付きで処理する」)。
+
+    Returns:
+        str: Discord Bot トークン (前後の空白を除去済み)
+
+    Raises:
+        RuntimeError: `DISCORD_TOKEN` が未設定または空の場合
+    """
+    ensure_env_loaded()
+    token = getenv("DISCORD_TOKEN")
+    if token is None or not token.strip():
+        raise RuntimeError(
+            "環境変数 DISCORD_TOKEN が設定されていません。"
+            ".env または実行環境に有効なトークンを設定してください"
+        )
+    return token.strip()
+
+
+# ==================================================
+# エントリーポイント
+# ==================================================
 def main() -> None:
     """
-    メイン処理
+    Bot 起動エントリーポイント
+
+    実行環境を決定 → 設定とロガーを初期化 → トークンを解決 → `SDBsBot` を起動します。
+    トークン未設定時はロガーへエラー出力した上で `SystemExit(1)` で終了します。
     """
     environment = get_environment()
 
     # アプリケーション全体で使用する環境を設定
-    # この呼び出し以降、config.py の全ヘルパー関数がこの環境を使用します
     set_environment(environment)
 
-    # 設定の読み込み
+    # 設定とロガーの初期化
     config = get_config()
-
-    # ロガーの設定
-    # 他モジュールで同じロガーを使う場合: logging.getLogger("__main__")
     logger = setup_logger(__name__)
 
-    # アプリケーション起動ログ
     logger.info("=" * 40)
     logger.info(f"実行環境: {environment}")
     logger.debug(f"プロジェクト名: {config.raw_config['project_name']}")
     logger.debug(f"バージョン: {config.raw_config['version']}")
 
-    logger.info("処理を開始します")
-
+    # トークンの解決 (未設定時は意味のあるメッセージで終了)
     try:
-        # 実際の処理をここに記述
-        pass
+        token = get_discord_token()
+    except RuntimeError as e:
+        logger.error(str(e))
+        raise SystemExit(1) from e
 
+    # Discord 設定と Bot インスタンスの構築
+    discord_config = get_discord_config()
+    bot = SDBsBot(discord_config)
+
+    logger.info("Bot を起動します")
+    try:
+        # `Bot.run` はブロッキング呼び出しで、ログイン → イベントループ → クリーンアップを行う
+        bot.run(token)
     except Exception as e:
-        logger.error(f"エラーが発生しました: {e}", exc_info=True)
+        logger.error(f"Bot の実行中にエラーが発生しました: {e}", exc_info=True)
         raise
     finally:
-        logger.info("処理を終了します")
+        logger.info("Bot を終了します")
 
 
 if __name__ == "__main__":
