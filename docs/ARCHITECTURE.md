@@ -313,7 +313,7 @@ ENVIRONMENT=development
         - `notify_session_result(image: BytesIO, masked_song_name: str, summary: str) -> None` — 結果チャンネルへ画像と集計を送信
         - チャンネル ID 未設定 / チャンネル取得失敗時は warning ログのみ出して握りつぶさない（[src/core/logger.py](src/core/logger.py) を経由）
       - テスト: [tests/services/test_discord_notifier.py](tests/services/test_discord_notifier.py)（`discord.Client` を mock し、`get_channel`・`send` 呼び出しの引数を検証。ID 未設定時に send が呼ばれないことも確認）
-    - [ ] **4.2: Bot クラスと cog 自動ロード基盤**
+    - [x] **4.2: Bot クラスと cog 自動ロード基盤**
       - [src/core/bot.py](src/core/bot.py): `commands.Bot` を継承する `SDBsBot` クラス
         - `setup_hook` で `src/cogs/` を `pkgutil.iter_modules` で走査し全 cog を `load_extension` する
         - `command_sync_guilds` が設定されていれば各 Guild に即時同期、空ならグローバル同期
