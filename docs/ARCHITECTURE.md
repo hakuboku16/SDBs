@@ -275,7 +275,7 @@ ENVIRONMENT=development
     - [x] **2.3: TaskGenerator**
       - [src/services/task_generator.py](src/services/task_generator.py): [assets/data/all_topics.json](assets/data/all_topics.json) から N 個ランダム生成。type の重複可否、`set` / `value` のサンプリング規則を実装
       - テスト: [tests/services/test_task_generator.py](tests/services/test_task_generator.py)
-    - [ ] **2.4: TaskEvaluator**
+    - [x] **2.4: TaskEvaluator**
       - [src/services/task_evaluator.py](src/services/task_evaluator.py): type ごとの評価関数を辞書で保持し、`evaluate(task, play_record, all_plays, song_repo)` で判定
       - 全 type に対応（title_*, level, level_total, result_*_total, notes_*, composer_*, time_*, version, book, shelf, difficult, featuring）
       - テスト: [tests/services/test_task_evaluator.py](tests/services/test_task_evaluator.py)（type ごとの代表ケース）
