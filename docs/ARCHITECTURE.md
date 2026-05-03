@@ -305,9 +305,26 @@ ENVIRONMENT=development
       - テスト: 出力 PNG サイズが元画像と一致、cleared 指定枚数分のパネルだけが剥がれていること、エラーケース（不正引数）
 
 - [ ] **ステップ 4: Bot とログ通知基盤**
-  - `src/core/bot.py`（cog 自動ロード、`on_app_command_error` で Discord ログチャンネルへ送信）
-  - `services/discord_notifier.py`
-  - `src/main.py` を Bot 起動仕様に変更
+  - 変更範囲が広いため以下に細分化する。各サブステップ完了時にチェックを更新する。依存関係の上流から順に実施
+    - [x] **4.1: DiscordNotifier の実装**
+      - [src/services/discord_notifier.py](src/services/discord_notifier.py): `DiscordNotifier` クラスを実装
+        - コンストラクタで `discord.Client` と `DiscordConfig` を受け取り、`log_channel_id` / `result_channel_id` を保持
+        - `notify_error(message: str, exc: BaseException | None = None) -> None` — ログチャンネルへエラー詳細を送信（traceback 整形含む）
+        - `notify_session_result(image: BytesIO, masked_song_name: str, summary: str) -> None` — 結果チャンネルへ画像と集計を送信
+        - チャンネル ID 未設定 / チャンネル取得失敗時は warning ログのみ出して握りつぶさない（[src/core/logger.py](src/core/logger.py) を経由）
+      - テスト: [tests/services/test_discord_notifier.py](tests/services/test_discord_notifier.py)（`discord.Client` を mock し、`get_channel`・`send` 呼び出しの引数を検証。ID 未設定時に send が呼ばれないことも確認）
+    - [ ] **4.2: Bot クラスと cog 自動ロード基盤**
+      - [src/core/bot.py](src/core/bot.py): `commands.Bot` を継承する `SDBsBot` クラス
+        - `setup_hook` で `src/cogs/` を `pkgutil.iter_modules` で走査し全 cog を `load_extension` する
+        - `command_sync_guilds` が設定されていれば各 Guild に即時同期、空ならグローバル同期
+        - `on_app_command_error` を実装し、`DiscordNotifier.notify_error` でログチャンネルへ送信し、ユーザーには ephemeral でエラーメッセージを返す
+        - `DiscordNotifier` インスタンスは Bot 属性 (`self.notifier`) として保持し各 cog から参照可能にする
+      - テスト: [tests/core/test_bot.py](tests/core/test_bot.py)（`setup_hook` の cog ロード処理を mock 経由で確認、`on_app_command_error` が notifier を呼ぶこと）
+      - `src/cogs/__init__.py` を空ファイルで作成（パッケージ化のみ。実 cog はステップ5で追加）
+    - [ ] **4.3: main.py を Bot 起動仕様に変更**
+      - [src/main.py](src/main.py): 環境変数 `DISCORD_TOKEN` をロードし、`SDBsBot(...).run(token)` する起動処理に書き換え
+      - 既存の [tests/test_main.py](tests/test_main.py) を新仕様に合わせて更新（`Bot.run` を mock し、token 未設定時に意味のあるエラーで終了することを確認）
+      - `pytest` 全件パスを確認
 
 - [ ] **ステップ 5: Cog 実装（1コマンドずつ）**
   - 全コマンドを単一のチェックボックスでまとめず、コマンドごとに進捗を可視化:
