@@ -262,7 +262,7 @@ ENVIRONMENT=development
       - [tests/core/test_config.py](tests/core/test_config.py) に新モデルのバリデーションテストと `get_*_config` のテストを追加
       - `pytest` を実行し全テストが通ることを確認
 
-- [ ] **ステップ 2: ドメインモデル（Discord 非依存）**
+- [x] **ステップ 2: ドメインモデル（Discord 非依存）**
   - 変更範囲が広いため以下に細分化する。各サブステップ完了時にチェックを更新する。依存関係の上流から順に実施
     - [x] **2.1: 楽曲データドメイン**
       - [src/services/song_repository.py](src/services/song_repository.py): `Song` データクラス（楽曲名 / shelf / book / version / time / composer / feat / 難易度別 level・notes 辞書）と `SongRepository`（[assets/data/all_songs.json](assets/data/all_songs.json) ロード、部分一致検索、楽曲名→画像パス解決）
@@ -279,7 +279,7 @@ ENVIRONMENT=development
       - [src/services/task_evaluator.py](src/services/task_evaluator.py): type ごとの評価関数を辞書で保持し、`evaluate(task, play_record, all_plays, song_repo)` で判定
       - 全 type に対応（title_*, level, level_total, result_*_total, notes_*, composer_*, time_*, version, book, shelf, difficult, featuring）
       - テスト: [tests/services/test_task_evaluator.py](tests/services/test_task_evaluator.py)（type ごとの代表ケース）
-    - [ ] **2.5: Session と SessionManager**
+    - [x] **2.5: Session と SessionManager**
       - [src/services/session.py](src/services/session.py) に `Session`（タスク / プレイ履歴 / 回答履歴 / 開始時刻 / チャンネル / 所有者など）
       - [src/services/session_manager.py](src/services/session_manager.py): シングルトン（`_current: Session | None`）。`start()` / `end()` / `reset()` / `current()` を提供
       - **タイマー処理は Discord 依存があるためステップ4以降に回し、本ステップではセッションオブジェクトの登録・取得・解放のみ実装する**
