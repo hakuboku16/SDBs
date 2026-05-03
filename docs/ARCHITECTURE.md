@@ -285,9 +285,24 @@ ENVIRONMENT=development
       - **タイマー処理は Discord 依存があるためステップ4以降に回し、本ステップではセッションオブジェクトの登録・取得・解放のみ実装する**
       - テスト: [tests/services/test_session.py](tests/services/test_session.py), [tests/services/test_session_manager.py](tests/services/test_session_manager.py)
 
-- [ ] **ステップ 3: 画像処理**
-  - `services/image_processor.py`（Pillow でパネル合成 + 効果）
-  - テスト: 出力 PNG のサイズと、パネル可視ビットの整合性
+- [x] **ステップ 3: 画像処理**
+  - 変更範囲が広いため以下に細分化する。各サブステップ完了時にチェックを更新する
+  - 全楽曲ジャケットは 300x300 RGB の前提（[assets/images/](assets/images/) を実測で確認済み）
+    - [x] **3.1: ImageProcessor 骨格と単一画像エフェクト**
+      - [src/services/image_processor.py](src/services/image_processor.py): `ImageProcessor` クラス（[`SongRepository`](src/services/song_repository.py) を依存注入）
+      - 内部メソッドを実装: `_load_image` / `_apply_rotation`（90/180/270 ランダム） / `_apply_grayscale`（RGB のまま L→RGB に戻す） / `_apply_mosaic`（resize→resize 方式）
+      - 効果適用順序は [パネル画像合成](#パネル画像合成)節に準拠
+      - テスト: [tests/services/test_image_processor.py](tests/services/test_image_processor.py)（各エフェクトの単独適用・出力サイズ・モード）
+    - [x] **3.2: パネルグリッド合成**
+      - 内部メソッド `_overlay_panels(image, panel_count, cleared_indices) -> Image` を実装
+      - `cleared_indices` のセルは加工せず、それ以外のセルは不透明な矩形で覆い、中央に番号（1-origin）を描画
+      - フォントは Pillow のデフォルト（`ImageFont.load_default()`）を使用
+      - テスト: cleared セル中央のピクセルが元画像と等しい、非 cleared セル中央のピクセルがパネル色と等しいこと
+    - [x] **3.3: compose 統合**
+      - `compose(song_name, panel_count, cleared_indices, rotate, grayscale, mosaic_block) -> BytesIO` を公開メソッドとして実装
+      - 入力バリデーション: `panel_count` は平方数、`mosaic_block` は正、`cleared_indices` は `[0, panel_count)` 範囲内、楽曲名は SongRepository に存在
+      - 出力は PNG 形式の `BytesIO`（discord.py の `discord.File` に直接渡せる形）
+      - テスト: 出力 PNG サイズが元画像と一致、cleared 指定枚数分のパネルだけが剥がれていること、エラーケース（不正引数）
 
 - [ ] **ステップ 4: Bot とログ通知基盤**
   - `src/core/bot.py`（cog 自動ロード、`on_app_command_error` で Discord ログチャンネルへ送信）
