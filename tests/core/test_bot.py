@@ -200,6 +200,29 @@ class TestSetupHookLoadCogs:
             for rec in caplog.records
         )
 
+    def test_skips_underscore_prefixed_modules(self):
+        """
+        アンダースコア始まりモジュール (例: `_helpers.py`) は cog ではないため
+        `load_extension` の対象から除外される
+        """
+        with patch("src.core.bot.pkgutil.iter_modules") as mock_iter:
+            mock_iter.return_value = [
+                MagicMock(name="start_session", ispkg=False),
+                MagicMock(name="_helpers", ispkg=False),
+            ]
+            mock_iter.return_value[0].name = "start_session"
+            mock_iter.return_value[1].name = "_helpers"
+
+            bot = _build_bot_without_super_init()
+            bot.load_extension = AsyncMock()
+
+            with _patch_tree():
+                _run(bot.setup_hook())
+
+        loaded = [call.args[0] for call in bot.load_extension.await_args_list]
+        assert "src.cogs.start_session" in loaded
+        assert "src.cogs._helpers" not in loaded
+
     def test_skips_load_when_package_has_no_path(
         self, caplog: pytest.LogCaptureFixture
     ):

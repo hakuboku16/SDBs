@@ -120,6 +120,11 @@ class SDBsBot(commands.Bot):
             # サブパッケージは想定しない (1 cog = 1 モジュール)
             if module_info.ispkg:
                 continue
+            # アンダースコア始まりのモジュールは cog ではないヘルパー扱いとし、
+            # `load_extension` (要 `setup` 関数) の対象から除外する
+            # (例: src/cogs/_helpers.py は楽曲名オートコンプリート等の共通関数を提供する)
+            if module_info.name.startswith("_"):
+                continue
             extension_name = f"{self._COGS_PACKAGE}.{module_info.name}"
             try:
                 await self.load_extension(extension_name)

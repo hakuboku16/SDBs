@@ -96,7 +96,7 @@ src/
 - 回答は本人にのみ ephemeral で `○ 正解です` / `× 不正解です` を返す
 - 公開チャンネルには結果を出さない（他メンバーには誰が何を回答したか見えない）
 - 正解しても不正解しても、セッション終了まで本人含む全員が `/play` ・ `/answer` を継続できる
-- 全回答ログ（誰が・いつ・何を回答したか）は `Session` に蓄積し、`/end` 時に結果チャンネルへ集計表示する
+- 正解者（user_id / user_name のセット、重複排除）を `Session` に蓄積し、`/end` 時に結果チャンネル embed の正解者欄として表示する
 
 ### お題自動判定
 
@@ -326,14 +326,51 @@ ENVIRONMENT=development
       - 既存の [tests/test_main.py](tests/test_main.py) を新仕様に合わせて更新（`Bot.run` を mock し、token 未設定時に意味のあるエラーで終了することを確認）
       - `pytest` 全件パスを確認
 
-- [ ] **ステップ 5: Cog 実装（1コマンドずつ）**
-  - 全コマンドを単一のチェックボックスでまとめず、コマンドごとに進捗を可視化:
-    - [ ] `/start`（[src/cogs/start_session.py](src/cogs/start_session.py)）
-    - [ ] `/progress`（[src/cogs/show_progress.py](src/cogs/show_progress.py)）
-    - [ ] `/play`（[src/cogs/input_play.py](src/cogs/input_play.py)）
-    - [ ] `/answer`（[src/cogs/answer_song.py](src/cogs/answer_song.py)）
-    - [ ] `/end`（[src/cogs/end_session.py](src/cogs/end_session.py)）
-    - [ ] `/reset`（[src/cogs/reset_session.py](src/cogs/reset_session.py)）
+- [ ] **ステップ 5: Cog 実装**
+  - 変更範囲が広いため以下に細分化する。各サブステップ完了時にチェックを更新する。依存関係の上流から順に実施
+    - [x] **5.1: cog 共通基盤**
+      - [x] **5.1.1: SessionManager のタイマー拡張**
+        - [src/services/session_manager.py](src/services/session_manager.py) に `on_warning` / `on_timeout` の async コールバック登録機構を追加
+        - `start()` 時に `asyncio.create_task` で「残り時間 = 警告分」後に `on_warning` を、「セッション制限時間」後に `on_timeout` を呼ぶタスクを2本起動
+        - `end()` / `reset()` で両タスクを `cancel()` し、コールバック登録もクリア
+        - 遅延値は呼び出し側 (cog) で [`DiscordConfig`](src/core/config.py) の `session_timeout_minutes` / `warning_minutes_before_end` から算出して `start()` の引数で注入する（manager 自身は config に依存しない設計）
+        - テスト更新: [tests/services/test_session_manager.py](tests/services/test_session_manager.py)（短い秒数を注入してコールバック発火順序を検証、`end()` 後に発火しないことを確認）
+      - [x] **5.1.2: cog 共通ヘルパー**
+        - 楽曲名オートコンプリート関数（`/play`・`/answer` 共通）を [src/cogs/_helpers.py](src/cogs/_helpers.py) に配置し、`SongRepository` 経由で部分一致候補を返す
+        - [src/core/bot.py](src/core/bot.py) の cog ローダーがアンダースコア始まりモジュール (`_helpers.py` 等) を `load_extension` 対象から除外するよう調整
+        - cog テスト用の `discord.Interaction` mock ヘルパーを [tests/cogs/conftest.py](tests/cogs/conftest.py) に追加（`response.send_message` / `followup.send` / `user` / `channel` / `guild` の最低限の振る舞い）
+    - [ ] **5.2: `/start`**（[src/cogs/start_session.py](src/cogs/start_session.py)）
+      - 引数: `panels`（`SessionConfig.allowed_panel_counts` から選択 / 既定 `default_panel_count`）, `rotate`（既定 False）, `grayscale`（既定 False）, `mosaic`（`mosaic_levels` のラベル選択 / 既定「なし」）
+      - 楽曲をランダム選択 → `TaskGenerator` で N 個のタスクを生成 → `SessionManager.start(...)` でセッション登録 → `ImageProcessor.compose` で初期画像（全パネル未開放）を合成
+      - 投稿メッセージをピン留めし、メッセージ ID を `Session` に保持する
+      - SessionManager の `on_warning` に「残り10分」のチャンネル通知を、`on_timeout` に `/end` と同等処理（結果通知 + ピン解除）を登録
+      - テスト: [tests/cogs/test_start_session.py](tests/cogs/test_start_session.py)（既セッション存在時の拒否、引数バリデーション、ピン留め呼び出し、コールバック登録）
+    - [ ] **5.3: `/end`**（[src/cogs/end_session.py](src/cogs/end_session.py)）
+      - 現セッションが無い場合は ephemeral でエラー応答
+      - 結果チャンネルへ embed を投稿:
+        - タイトル: マスク済み楽曲名（例: `*****`）
+        - 画像: セッション終了時点のパネル画像（`ImageProcessor.compose` で再合成）
+        - フィールド: 正解者一覧（`Session.correct_answerers`）。0人の場合は「正解者なし」と表示
+      - 元のピン留めメッセージのピンを解除
+      - `SessionManager.end()` を呼んでセッションを破棄（タイマーも停止）
+      - テスト: [tests/cogs/test_end_session.py](tests/cogs/test_end_session.py)（embed 内容、ピン解除、SessionManager 呼び出し、セッション無し時のエラー応答、正解者0人ケース）
+    - [ ] **5.4: `/reset`**（[src/cogs/reset_session.py](src/cogs/reset_session.py)）
+      - `SessionManager.reset()` を呼び、ピン留めメッセージのピン解除のみ実行（結果チャンネルへの投稿は行わない）
+      - テスト: [tests/cogs/test_reset_session.py](tests/cogs/test_reset_session.py)
+    - [ ] **5.5: `/progress`**（[src/cogs/show_progress.py](src/cogs/show_progress.py)）
+      - 現セッションのタスク一覧 + 進捗を embed で表示。各 task は `current/set_value` 形式、cleared 済みは記号で視覚化
+      - セッション無し時は ephemeral でエラー応答
+      - テスト: [tests/cogs/test_show_progress.py](tests/cogs/test_show_progress.py)
+    - [ ] **5.6: `/play`**（[src/cogs/input_play.py](src/cogs/input_play.py)）
+      - 引数: `song`（autocomplete）, `difficulty`, `charming`, `combo`（`is_natural_number` でバリデーション）
+      - `PlayRecord` を生成しセッションに追加 → 全タスクを `TaskEvaluator` で評価 → 進捗のあったタスクを embed で返答
+      - パネルが新たに剥がれていれば `ImageProcessor.compose` で画像を再合成し、ピン留めメッセージを編集（添付画像差し替え）
+      - テスト: [tests/cogs/test_input_play.py](tests/cogs/test_input_play.py)
+    - [ ] **5.7: `/answer`**（[src/cogs/answer_song.py](src/cogs/answer_song.py)）
+      - 引数: `song`（autocomplete、5.1.2 のヘルパー利用）
+      - 正解判定後、ephemeral で `○ 正解です` / `× 不正解です` を返す。正解時のみ `Session.correct_answerers` に `(user_id, user_name)` を追加（既存なら冪等）
+      - 公開チャンネルへの出力は無し。セッション終了は引き起こさない
+      - テスト: [tests/cogs/test_answer_song.py](tests/cogs/test_answer_song.py)（正解 / 不正解 / 同一ユーザー重複登録の冪等性）
   - 各 cog 追加時にエンドツーエンドの想定動作を README/DEVELOPMENT.md に追記
 
 - [ ] **ステップ 6: Docker 化**
@@ -356,7 +393,7 @@ ENVIRONMENT=development
 3. `/play song:Aya difficulty:Hard charming:300 combo:300` → 該当タスクが進捗 +1 されパネルが剥がれることを確認
 4. `/progress` → タスク状態の表示確認
 5. `/answer song:Aya` → 本人にのみ ephemeral で ○/× が返ることを確認。正解後も `/play` ・ `/answer` を続けられることを確認。複数メンバーが並行して回答できることを確認
-6. `/end` → 全員の回答ログを集計表示・結果チャンネルへマスク済み楽曲名で投稿・ピン解除
+6. `/end` → 結果チャンネルへ embed（マスク済み楽曲名・セッション終了時点のパネル画像・正解者一覧）を投稿し、ピン解除されることを確認
 7. 30分タイマー（`session_timeout_minutes` を一時的に 1 にして検証） → 10分前通知 → 自動終了
 8. エラーを意図的に発生（不正な楽曲名）→ ログチャンネル投稿確認
 
