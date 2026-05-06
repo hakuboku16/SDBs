@@ -104,6 +104,16 @@ class TestSessionInit:
         assert session.mosaic_block == 300
         assert session.play_records == []
         assert session.answer_records == []
+        # ピン留めメッセージ ID は /start 完了後に書き込むため初期値は None
+        assert session.pinned_message_id is None
+
+    def test_pinned_message_id_can_be_assigned(self):
+        """
+        pinned_message_id は後から書き込んで `/play`・`/end` から参照できる
+        """
+        session = _make_session()
+        session.pinned_message_id = 9876543210
+        assert session.pinned_message_id == 9876543210
 
     def test_panel_count_must_match_tasks(self):
         """

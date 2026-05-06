@@ -8,6 +8,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Optional
 
 from src.services.task import Task
 
@@ -83,6 +84,10 @@ class Session:
         mosaic_block: モザイクの block 画素数 (大きいほど弱い)
         play_records: /play で蓄積するプレイ履歴 (時系列)
         answer_records: /answer の全回答履歴 (時系列)
+        pinned_message_id: ピン留めしたタスク提示メッセージの ID。
+            `/start` 時に投稿/ピン留めしたメッセージ ID を後段の `/play` (画像差し替え) や
+            `/end` / `/reset` (ピン解除) から参照する。`/start` 内でメッセージ送信が完了する
+            まで未確定なため `Optional` とし、送信完了後に書き込む。
     """
 
     song_name: str
@@ -96,6 +101,7 @@ class Session:
     mosaic_block: int = 300
     play_records: list[PlayRecord] = field(default_factory=list)
     answer_records: list[AnswerRecord] = field(default_factory=list)
+    pinned_message_id: Optional[int] = None
 
     def __post_init__(self) -> None:
         """

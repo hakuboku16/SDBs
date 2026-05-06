@@ -339,7 +339,7 @@ ENVIRONMENT=development
         - 楽曲名オートコンプリート関数（`/play`・`/answer` 共通）を [src/cogs/_helpers.py](src/cogs/_helpers.py) に配置し、`SongRepository` 経由で部分一致候補を返す
         - [src/core/bot.py](src/core/bot.py) の cog ローダーがアンダースコア始まりモジュール (`_helpers.py` 等) を `load_extension` 対象から除外するよう調整
         - cog テスト用の `discord.Interaction` mock ヘルパーを [tests/cogs/conftest.py](tests/cogs/conftest.py) に追加（`response.send_message` / `followup.send` / `user` / `channel` / `guild` の最低限の振る舞い）
-    - [ ] **5.2: `/start`**（[src/cogs/start_session.py](src/cogs/start_session.py)）
+    - [x] **5.2: `/start`**（[src/cogs/start_session.py](src/cogs/start_session.py)）
       - 引数: `panels`（`SessionConfig.allowed_panel_counts` から選択 / 既定 `default_panel_count`）, `rotate`（既定 False）, `grayscale`（既定 False）, `mosaic`（`mosaic_levels` のラベル選択 / 既定「なし」）
       - 楽曲をランダム選択 → `TaskGenerator` で N 個のタスクを生成 → `SessionManager.start(...)` でセッション登録 → `ImageProcessor.compose` で初期画像（全パネル未開放）を合成
       - 投稿メッセージをピン留めし、メッセージ ID を `Session` に保持する
