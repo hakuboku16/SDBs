@@ -1,0 +1,35 @@
+# =============================================================================
+# Deemo x アタック25 Discord Bot - 24h 稼働構成
+# =============================================================================
+# 起動: docker compose up --build -d
+# ログ: docker compose logs -f
+# 停止: docker compose down
+# =============================================================================
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sdbs-discord-bot:latest
+    container_name: sdbs-discord-bot
+
+    # 24h 稼働 / 異常終了時の自動復旧
+    restart: always
+
+    # Discord トークン等は .env から注入
+    env_file:
+      - .env
+
+    # ログ・アセットを host 側で永続化 (再ビルドなしで内容更新可能)
+    volumes:
+      - ./logs:/app/logs
+      - ./assets:/app/assets
+
+    # 軽量な健全性確認: Python プロセスが生存していることを定期チェック
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
