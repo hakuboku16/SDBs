@@ -354,7 +354,7 @@ ENVIRONMENT=development
       - 元のピン留めメッセージのピンを解除
       - `SessionManager.end()` を呼んでセッションを破棄（タイマーも停止）
       - テスト: [tests/cogs/test_end_session.py](tests/cogs/test_end_session.py)（embed 内容、ピン解除、SessionManager 呼び出し、セッション無し時のエラー応答、正解者0人ケース）
-    - [ ] **5.4: `/reset`**（[src/cogs/reset_session.py](src/cogs/reset_session.py)）
+    - [x] **5.4: `/reset`**（[src/cogs/reset_session.py](src/cogs/reset_session.py)）
       - `SessionManager.reset()` を呼び、ピン留めメッセージのピン解除のみ実行（結果チャンネルへの投稿は行わない）
       - テスト: [tests/cogs/test_reset_session.py](tests/cogs/test_reset_session.py)
     - [ ] **5.5: `/progress`**（[src/cogs/show_progress.py](src/cogs/show_progress.py)）
