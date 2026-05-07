@@ -345,9 +345,13 @@ class TestConfig:
         with pytest.raises(ValidationError):
             conf.get_logger_config()
 
+    @patch.dict("os.environ", {}, clear=True)
     def test_get_discord_config(self):
         """
         get_discord_config() が DiscordConfig インスタンスを返す
+
+        チャンネル ID は .env で管理する仕様のため、yaml に書いても
+        環境変数未設定なら None になることをあわせて検証する。
         """
         conf = config_module.Config()
         conf.raw_config = {
@@ -355,15 +359,69 @@ class TestConfig:
                 "session_timeout_minutes": 30,
                 "warning_minutes_before_end": 10,
                 "command_sync_guilds": [111],
-                "log_channel_id": 222,
-                "result_channel_id": 333,
             }
         }
         result = conf.get_discord_config()
         assert isinstance(result, DiscordConfig)
         assert result.session_timeout_minutes == 30
         assert result.command_sync_guilds == [111]
+        assert result.log_channel_id is None
+        assert result.result_channel_id is None
 
+    @patch.dict(
+        "os.environ",
+        {"LOG_CHANNEL_ID": "222", "RESULT_CHANNEL_ID": "333"},
+        clear=True,
+    )
+    def test_get_discord_config_reads_channel_ids_from_env(self):
+        """
+        通知先チャンネル ID は環境変数 (.env) から読み込まれる
+        """
+        conf = config_module.Config()
+        conf.raw_config = {
+            "discord": {
+                "session_timeout_minutes": 30,
+                "warning_minutes_before_end": 10,
+            }
+        }
+        result = conf.get_discord_config()
+        assert result.log_channel_id == 222
+        assert result.result_channel_id == 333
+
+    @patch.dict(
+        "os.environ",
+        {"LOG_CHANNEL_ID": "999", "RESULT_CHANNEL_ID": "888"},
+        clear=True,
+    )
+    def test_get_discord_config_env_overrides_yaml(self):
+        """
+        yaml にチャンネル ID が残っていても環境変数が優先される
+        (移行期間中の互換性は意図せず混入したケースの挙動を明示)
+        """
+        conf = config_module.Config()
+        conf.raw_config = {
+            "discord": {
+                "session_timeout_minutes": 30,
+                "warning_minutes_before_end": 10,
+                "log_channel_id": 111,
+                "result_channel_id": 222,
+            }
+        }
+        result = conf.get_discord_config()
+        assert result.log_channel_id == 999
+        assert result.result_channel_id == 888
+
+    @patch.dict("os.environ", {"LOG_CHANNEL_ID": "not-an-int"}, clear=True)
+    def test_get_discord_config_invalid_channel_id_env(self):
+        """
+        環境変数が整数として解釈できない場合は ValueError (握りつぶさない)
+        """
+        conf = config_module.Config()
+        conf.raw_config = {"discord": {}}
+        with pytest.raises(ValueError, match="LOG_CHANNEL_ID"):
+            conf.get_discord_config()
+
+    @patch.dict("os.environ", {}, clear=True)
     def test_get_discord_config_with_empty_section(self):
         """
         discord セクションが無い場合でも既定値で生成される
@@ -374,6 +432,7 @@ class TestConfig:
         assert isinstance(result, DiscordConfig)
         assert result.session_timeout_minutes == 30
 
+    @patch.dict("os.environ", {}, clear=True)
     def test_get_discord_config_invalid(self):
         """
         Discord 設定が不正な場合は ValidationError

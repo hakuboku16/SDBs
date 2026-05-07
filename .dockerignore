@@ -1,0 +1,65 @@
+# =============================================================================
+# Docker ビルドコンテキストから除外するパス
+# =============================================================================
+# イメージサイズ削減と機密情報の混入防止のため、明示的に除外する。
+# =============================================================================
+
+# Git / VCS
+.git
+.gitignore
+.gitattributes
+
+# Python キャッシュ・ビルド成果物
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.dll
+.eggs/
+*.egg-info/
+build/
+dist/
+
+# 仮想環境 (ホスト側のものはコンテナに不要)
+.venv/
+venv/
+env/
+
+# テスト・カバレッジ・型チェッカーキャッシュ
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.cache/
+
+# 機密情報 (env_file で別途注入する)
+.env
+*.env
+!.env.example
+*.secret
+secrets.json
+
+# ログ (ホスト側のものをマウントするためビルドに含めない)
+logs/
+*.log
+
+# ドキュメント・エディタ設定
+docs/
+*.md
+!README.md
+.vscode/
+.idea/
+.claude/
+CLAUDE.md
+
+# OS 依存ファイル
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker 関連自身 (ビルドに不要)
+Dockerfile
+docker-compose.yml
+.dockerignore

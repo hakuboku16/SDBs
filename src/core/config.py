@@ -5,6 +5,7 @@
 """
 
 import math
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -13,6 +14,38 @@ from pydantic import BaseModel, field_validator, model_validator
 from utils.helpers import get_absolute_path, load_yaml, merge_dicts
 
 _VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+
+# .env で管理する Discord チャンネル ID の環境変数名
+_ENV_LOG_CHANNEL_ID = "LOG_CHANNEL_ID"
+_ENV_RESULT_CHANNEL_ID = "RESULT_CHANNEL_ID"
+
+
+def _read_channel_id_env(name: str) -> Optional[int]:
+    """
+    環境変数から Discord チャンネル ID を整数として読み込む
+
+    未設定または空文字の場合は None を返します。
+    整数として解釈できない値が指定されている場合は意味のあるメッセージで
+    ValueError を送出します (要件: エラーは握りつぶさない)。
+
+    Args:
+        name: 環境変数名 (例: "LOG_CHANNEL_ID")
+
+    Returns:
+        Optional[int]: チャンネル ID。未設定なら None
+
+    Raises:
+        ValueError: 値が整数として解釈できない場合
+    """
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return None
+    try:
+        return int(raw.strip())
+    except ValueError as e:
+        raise ValueError(
+            f"環境変数 {name} は整数で指定してください: '{raw}'"
+        ) from e
 
 
 # ==================================================
@@ -251,13 +284,22 @@ class Config:
         """
         Discord Bot 設定を取得
 
+        通知先チャンネル ID は .env で管理するため、yaml の値ではなく
+        環境変数 (LOG_CHANNEL_ID / RESULT_CHANNEL_ID) から読み込みます。
+
         Returns:
             DiscordConfig: Discord 関連設定オブジェクト
 
         Raises:
             pydantic.ValidationError: 設定値が不正な場合
+            ValueError: 環境変数が整数として解釈できない場合
         """
-        discord_config: dict = self.raw_config.get("discord", {})
+        # 環境変数で上書きするため raw_config を破壊しないようコピーする
+        discord_config: dict = dict(self.raw_config.get("discord", {}))
+        discord_config["log_channel_id"] = _read_channel_id_env(_ENV_LOG_CHANNEL_ID)
+        discord_config["result_channel_id"] = _read_channel_id_env(
+            _ENV_RESULT_CHANNEL_ID
+        )
         return DiscordConfig(**discord_config)
 
     def get_session_config(self) -> SessionConfig:

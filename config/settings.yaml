@@ -22,10 +22,9 @@ logger:
 
 
 # Discord Bot 関連の設定
+# log_channel_id / result_channel_id は .env で管理 (LOG_CHANNEL_ID / RESULT_CHANNEL_ID)
 discord:
   command_sync_guilds: []     # 開発時のみ即時反映用に Guild ID を入れる。本番は空でグローバル登録
-  log_channel_id: null        # エラーログ送信先
-  result_channel_id: null     # セッション終了時の結果送信先
   session_timeout_minutes: 30
   warning_minutes_before_end: 10
 

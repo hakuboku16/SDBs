@@ -373,7 +373,7 @@ ENVIRONMENT=development
       - テスト: [tests/cogs/test_answer_song.py](tests/cogs/test_answer_song.py)（正解 / 不正解 / 同一ユーザー重複登録の冪等性）
   - 各 cog 追加時にエンドツーエンドの想定動作を README/DEVELOPMENT.md に追記
 
-- [ ] **ステップ 6: Docker 化**
+- [x] **ステップ 6: Docker 化**
   - `Dockerfile` と `docker-compose.yml`
   - `docker compose up --build` で 24h 稼働確認
 
