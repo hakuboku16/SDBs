@@ -357,7 +357,7 @@ ENVIRONMENT=development
     - [x] **5.4: `/reset`**（[src/cogs/reset_session.py](src/cogs/reset_session.py)）
       - `SessionManager.reset()` を呼び、ピン留めメッセージのピン解除のみ実行（結果チャンネルへの投稿は行わない）
       - テスト: [tests/cogs/test_reset_session.py](tests/cogs/test_reset_session.py)
-    - [ ] **5.5: `/progress`**（[src/cogs/show_progress.py](src/cogs/show_progress.py)）
+    - [x] **5.5: `/progress`**（[src/cogs/show_progress.py](src/cogs/show_progress.py)）
       - 現セッションのタスク一覧 + 進捗を embed で表示。各 task は `current/set_value` 形式、cleared 済みは記号で視覚化
       - セッション無し時は ephemeral でエラー応答
       - テスト: [tests/cogs/test_show_progress.py](tests/cogs/test_show_progress.py)
