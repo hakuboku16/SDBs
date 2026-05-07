@@ -366,7 +366,7 @@ ENVIRONMENT=development
       - `PlayRecord` を生成しセッションに追加 → 全タスクを `TaskEvaluator` で評価 → 進捗のあったタスクを embed で返答
       - パネルが新たに剥がれていれば `ImageProcessor.compose` で画像を再合成し、ピン留めメッセージを編集（添付画像差し替え）
       - テスト: [tests/cogs/test_input_play.py](tests/cogs/test_input_play.py)
-    - [ ] **5.7: `/answer`**（[src/cogs/answer_song.py](src/cogs/answer_song.py)）
+    - [x] **5.7: `/answer`**（[src/cogs/answer_song.py](src/cogs/answer_song.py)）
       - 引数: `song`（autocomplete、5.1.2 のヘルパー利用）
       - 正解判定後、ephemeral で `○ 正解です` / `× 不正解です` を返す。正解時のみ `Session.correct_answerers` に `(user_id, user_name)` を追加（既存なら冪等）
       - 公開チャンネルへの出力は無し。セッション終了は引き起こさない
