@@ -20,6 +20,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.cogs._helpers import build_error_embed, build_success_embed
 from src.services.session_manager import SessionManager
 
 # モジュールスコープのロガー (production では `__main__` 親ロガーから propagate)
@@ -67,7 +68,7 @@ class ResetSessionCog(commands.Cog):
 
         if session is None:
             await interaction.response.send_message(
-                "進行中のセッションがありません。",
+                embed=build_error_embed("進行中のセッションがありません。"),
                 ephemeral=True,
             )
             return
@@ -85,7 +86,7 @@ class ResetSessionCog(commands.Cog):
         manager.reset()
 
         await interaction.followup.send(
-            "セッションをリセットしました。",
+            embed=build_success_embed("セッションをリセットしました。"),
             ephemeral=True,
         )
 

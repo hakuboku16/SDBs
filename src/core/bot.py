@@ -21,6 +21,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.cogs._helpers import build_error_embed
 from src.core.config import DiscordConfig
 from src.services.discord_notifier import DiscordNotifier
 
@@ -187,13 +188,16 @@ class SDBsBot(commands.Bot):
         else:
             logger.error("%s (notifier 未初期化)", log_message, exc_info=error)
 
-        # 2) ユーザーへ ephemeral で返答
-        user_message = "コマンドの実行中にエラーが発生しました。管理者にお問い合わせください。"
+        # 2) ユーザーへ ephemeral で返答 (Bot からの送信は embed 統一)
+        user_embed = build_error_embed(
+            "コマンドの実行中にエラーが発生しました。管理者にお問い合わせください。",
+            title="エラー",
+        )
         try:
             if interaction.response.is_done():
-                await interaction.followup.send(user_message, ephemeral=True)
+                await interaction.followup.send(embed=user_embed, ephemeral=True)
             else:
-                await interaction.response.send_message(user_message, ephemeral=True)
+                await interaction.response.send_message(embed=user_embed, ephemeral=True)
         except discord.DiscordException as reply_error:
             # 応答失敗 (interaction が既にタイムアウト等) はログに残し握りつぶす
             logger.warning(

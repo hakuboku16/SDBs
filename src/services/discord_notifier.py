@@ -33,8 +33,8 @@ class DiscordNotifier:
     いずれもチャンネル ID 未設定時は warning を出して送信をスキップします。
     """
 
-    # Discord メッセージ本文の最大長 (公式仕様: 2000 文字)
-    _MAX_CONTENT_LENGTH: int = 2000
+    # Discord embed.description の最大長 (公式仕様: 4096 文字)
+    _MAX_DESCRIPTION_LENGTH: int = 4096
 
     # Discord embed field 値の最大長 (公式仕様: 1024 文字)
     _MAX_FIELD_LENGTH: int = 1024
@@ -44,6 +44,10 @@ class DiscordNotifier:
 
     # 切り詰めた際に挿入するマーカー (先頭に付与し、末尾を残す)
     _TRUNCATE_MARKER: str = "…(切り詰め)…\n"
+
+    # エラー通知 embed のタイトル / 色 (Bot から送るメッセージは embed 統一の方針)
+    _ERROR_EMBED_TITLE: str = "エラー"
+    _ERROR_EMBED_COLOR: discord.Color = discord.Color.red()
 
     def __init__(self, client: discord.Client, config: DiscordConfig) -> None:
         """
@@ -69,24 +73,32 @@ class DiscordNotifier:
         エラーをログチャンネルへ通知する
 
         例外オブジェクトが指定された場合は traceback を整形してメッセージに付加します。
-        Discord 制限 (2000 文字) を超える場合は先頭を切り詰めて末尾 (例外の発生箇所側) を残します。
+        Bot からの送信は embed 形式に統一されているため、embed.description にメッセージと
+        コードブロックを格納します。Discord embed.description 制限 (4096 文字) を超える
+        場合は先頭を切り詰めて末尾 (例外の発生箇所側) を残します。
 
         Args:
             message: エラー概要 (発生箇所やユーザー操作の文脈など)
             exc: 例外オブジェクト。None の場合は概要メッセージのみ送信
         """
-        content: str = message
+        description: str = message
         if exc is not None:
             tb_text: str = "".join(
                 traceback.format_exception(type(exc), exc, exc.__traceback__)
             )
             # コードブロックで囲み traceback を可読化
-            content = f"{message}\n```\n{tb_text}```"
+            description = f"{message}\n```\n{tb_text}```"
 
+        embed: discord.Embed = discord.Embed(
+            title=self._ERROR_EMBED_TITLE,
+            description=self._truncate(description),
+            color=self._ERROR_EMBED_COLOR,
+        )
         await self._send(
             channel_id=self._log_channel_id,
             channel_label="ログ",
-            content=self._truncate(content),
+            content="",
+            embed=embed,
         )
 
     async def notify_session_result(
@@ -224,7 +236,7 @@ class DiscordNotifier:
     @classmethod
     def _truncate(cls, content: str) -> str:
         """
-        Discord の 2000 文字制限に収まるよう先頭を切り詰める
+        Discord embed.description の 4096 文字制限に収まるよう先頭を切り詰める
 
         traceback の場合、底 (例外発生箇所) が末尾にあるため末尾を残す方が情報量が多い。
 
@@ -234,9 +246,9 @@ class DiscordNotifier:
         Returns:
             切り詰め後の本文 (元から短い場合はそのまま)
         """
-        if len(content) <= cls._MAX_CONTENT_LENGTH:
+        if len(content) <= cls._MAX_DESCRIPTION_LENGTH:
             return content
-        keep: int = cls._MAX_CONTENT_LENGTH - len(cls._TRUNCATE_MARKER)
+        keep: int = cls._MAX_DESCRIPTION_LENGTH - len(cls._TRUNCATE_MARKER)
         return cls._TRUNCATE_MARKER + content[-keep:]
 
     @classmethod

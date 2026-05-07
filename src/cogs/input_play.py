@@ -26,7 +26,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from src.cogs._helpers import SongAutocomplete, build_song_autocomplete
+from src.cogs._helpers import (
+    SongAutocomplete,
+    build_error_embed,
+    build_song_autocomplete,
+)
 from src.core.config import get_assets_config
 from src.services.image_processor import ImageProcessor
 from src.services.session import PlayRecord, Session
@@ -131,13 +135,17 @@ class InputPlayCog(commands.Cog):
         # ----- 1) 引数バリデーション (charming / combo) -----
         if not is_natural_number(charming):
             await interaction.response.send_message(
-                f"charming は 1 以上の自然数で指定してください: {charming}",
+                embed=build_error_embed(
+                    f"charming は 1 以上の自然数で指定してください: {charming}"
+                ),
                 ephemeral=True,
             )
             return
         if not is_natural_number(combo):
             await interaction.response.send_message(
-                f"combo は 1 以上の自然数で指定してください: {combo}",
+                embed=build_error_embed(
+                    f"combo は 1 以上の自然数で指定してください: {combo}"
+                ),
                 ephemeral=True,
             )
             return
@@ -147,7 +155,9 @@ class InputPlayCog(commands.Cog):
         session: Optional[Session] = manager.current()
         if session is None:
             await interaction.response.send_message(
-                "進行中のセッションがありません。/start で新しいセッションを開始してください。",
+                embed=build_error_embed(
+                    "進行中のセッションがありません。/start で新しいセッションを開始してください。"
+                ),
                 ephemeral=True,
             )
             return
@@ -155,7 +165,9 @@ class InputPlayCog(commands.Cog):
         # ----- 3) 楽曲存在チェック (autocomplete を経由しない手入力に備える) -----
         if self._song_repository.find_by_name(song) is None:
             await interaction.response.send_message(
-                f"指定された楽曲が見つかりません: {song}",
+                embed=build_error_embed(
+                    f"指定された楽曲が見つかりません: {song}"
+                ),
                 ephemeral=True,
             )
             return

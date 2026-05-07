@@ -145,13 +145,16 @@ class TestEndHappyPath:
         # summary は "セッション終了"
         assert kwargs["summary"] == "セッション終了"
 
-        # 完了応答が ephemeral でユーザーへ届く
+        # 完了応答が ephemeral でユーザーへ届く (embed 形式)
         interaction.followup.send.assert_awaited_once()
         followup_kwargs = interaction.followup.send.call_args.kwargs
         assert followup_kwargs.get("ephemeral") is True
-        # 楽曲名が含まれる
-        followup_args, _ = interaction.followup.send.call_args
-        assert "Magnolia" in followup_args[0]
+        # embed として送られ、楽曲名が description に含まれる
+        embed = followup_kwargs.get("embed")
+        import discord as _discord
+        assert isinstance(embed, _discord.Embed)
+        assert embed.description is not None
+        assert "Magnolia" in embed.description
 
     def test_passes_none_notifier_when_bot_has_no_notifier(self):
         """`bot.notifier` 未設定なら ``None`` を finalizer に渡す"""

@@ -24,6 +24,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.cogs._helpers import (
+    EMBED_COLOR_INFO,
+    build_error_embed,
+    build_warning_embed,
+)
 from src.core.config import (
     DiscordConfig,
     SessionConfig,
@@ -162,13 +167,17 @@ class StartSessionCog(commands.Cog):
 
         if panel_count not in self._session_config.allowed_panel_counts:
             await interaction.response.send_message(
-                f"許可されていないパネル数です: {panel_count}",
+                embed=build_error_embed(
+                    f"許可されていないパネル数です: {panel_count}"
+                ),
                 ephemeral=True,
             )
             return
         if mosaic_label not in self._session_config.mosaic_levels:
             await interaction.response.send_message(
-                f"未知のモザイクラベルです: {mosaic_label}",
+                embed=build_error_embed(
+                    f"未知のモザイクラベルです: {mosaic_label}"
+                ),
                 ephemeral=True,
             )
             return
@@ -178,7 +187,9 @@ class StartSessionCog(commands.Cog):
         manager: SessionManager = SessionManager.instance()
         if manager.is_active():
             await interaction.response.send_message(
-                "既に進行中のセッションがあります。/end か /reset で終了してから再度開始してください。",
+                embed=build_error_embed(
+                    "既に進行中のセッションがあります。/end か /reset で終了してから再度開始してください。"
+                ),
                 ephemeral=True,
             )
             return
@@ -187,7 +198,7 @@ class StartSessionCog(commands.Cog):
         channel = interaction.channel
         if interaction.channel_id is None or channel is None:
             await interaction.response.send_message(
-                "チャンネル外では実行できません。",
+                embed=build_error_embed("チャンネル外では実行できません。"),
                 ephemeral=True,
             )
             return
@@ -199,7 +210,9 @@ class StartSessionCog(commands.Cog):
         songs = self._song_repository.all()
         if not songs:
             await interaction.followup.send(
-                "楽曲データが空です。assets/data/all_songs.json を確認してください。",
+                embed=build_error_embed(
+                    "楽曲データが空です。assets/data/all_songs.json を確認してください。"
+                ),
                 ephemeral=True,
             )
             return
@@ -232,11 +245,14 @@ class StartSessionCog(commands.Cog):
         )
 
         # ----- 9) メッセージ投稿 (タスク一覧 + パネル画像) -----
+        # Bot からの送信は embed 統一の方針 (要件: メッセージはすべて embed 形式)。
+        # 画像は同送する `discord.File` を embed.image に attachment スキームで参照させる。
         file = discord.File(image_buffer, filename=_PANEL_IMAGE_FILENAME)
-        content: str = self._build_initial_message(session, mosaic_label)
+        embed = self._build_initial_embed(session, mosaic_label)
+        embed.set_image(url=f"attachment://{_PANEL_IMAGE_FILENAME}")
         # wait=True で送信完了 Message を取得しピン留め対象にする
         sent_message = await interaction.followup.send(
-            content=content, file=file, wait=True
+            embed=embed, file=file, wait=True
         )
 
         # ----- 10) ピン留めとメッセージ ID 保存 -----
@@ -278,14 +294,24 @@ class StartSessionCog(commands.Cog):
     # --------------------------------------------------
     # 内部ヘルパー
     # --------------------------------------------------
-    def _build_initial_message(self, session: Session, mosaic_label: str) -> str:
+    def _build_initial_embed(
+        self, session: Session, mosaic_label: str
+    ) -> discord.Embed:
         """
-        セッション開始時にチャンネルへ投稿するメッセージ本文を組み立てる
+        セッション開始時にチャンネルへ投稿する embed を組み立てる
 
         進捗表示は `/progress` で詳細化するため、ここではタスク種別と必要回数のみ並べます。
+        embed は画像を `set_image` で添付するため、本文 (description) には設定値とお題列を
+        まとめて格納します。
+
+        Args:
+            session: 開始するセッション
+            mosaic_label: 画像合成に使ったモザイクラベル (本文表示用)
+
+        Returns:
+            タスク一覧と設定値を含む `discord.Embed` (色は info)
         """
-        lines: list[str] = [
-            "**セッション開始**",
+        description_lines: list[str] = [
             f"- パネル数: {session.panel_count}",
             f"- モザイク: {mosaic_label} (block={session.mosaic_block}px)",
             (
@@ -296,16 +322,28 @@ class StartSessionCog(commands.Cog):
             "**お題**",
         ]
         for index, task in enumerate(session.tasks, start=1):
-            lines.append(f"{index}. {task.type} (set={task.set_value})")
-        return "\n".join(lines)
+            description_lines.append(
+                f"{index}. {task.type} (set={task.set_value})"
+            )
+        return discord.Embed(
+            title="セッション開始",
+            description="\n".join(description_lines),
+            color=EMBED_COLOR_INFO,
+        )
 
     async def _notify_warning(self, channel: discord.abc.Messageable) -> None:
         """
         残り時間警告 (規定: 10 分前) をセッションチャンネルへ送信する
+
+        Bot からの送信は embed 統一の方針のため、warning embed (orange) を組み立てて送る。
         """
         minutes: int = self._discord_config.warning_minutes_before_end
+        embed = build_warning_embed(
+            f"セッション終了まで残り {minutes} 分です。",
+            title="残り時間のお知らせ",
+        )
         try:
-            await channel.send(f"⚠ セッション終了まで残り {minutes} 分です。")
+            await channel.send(embed=embed)
         except discord.DiscordException as e:
             # チャンネル削除等で送信不能でも残り処理 (timeout 等) を妨げない
             logger.warning("残り時間警告の送信に失敗しました: %s", e)

@@ -165,7 +165,7 @@ class TestAnswerJudgement:
     """正解判定と ephemeral 応答内容を検証する"""
 
     def test_correct_answer_returns_ephemeral_success_message(self):
-        """正解時: ○ メッセージが本人にのみ ephemeral で返る"""
+        """正解時: ○ メッセージが embed として本人にのみ ephemeral で返る"""
         cog = _make_cog(songs=[_sample_song("SampleSong")])
         SessionManager.instance().start(_make_session(song_name="SampleSong"))
         interaction = make_mock_interaction(
@@ -178,15 +178,18 @@ class TestAnswerJudgement:
         asyncio.run(run())
 
         interaction.response.send_message.assert_awaited_once()
-        args, kwargs = interaction.response.send_message.call_args
-        # 第 1 引数 (positional) または content kwarg のいずれかに ○ が含まれる
-        message: str = args[0] if args else kwargs.get("content", "")
+        _, kwargs = interaction.response.send_message.call_args
+        # Bot からの送信は embed 統一。embed.description に ○ / "正解" が含まれる
+        import discord as _discord
+        embed = kwargs.get("embed")
+        assert isinstance(embed, _discord.Embed)
+        message: str = embed.description or ""
         assert "○" in message
         assert "正解" in message
         assert kwargs.get("ephemeral") is True
 
     def test_incorrect_answer_returns_ephemeral_failure_message(self):
-        """不正解時: × メッセージが本人にのみ ephemeral で返る"""
+        """不正解時: × メッセージが embed として本人にのみ ephemeral で返る"""
         cog = _make_cog(
             songs=[_sample_song("SampleSong"), _sample_song("WrongSong")]
         )
@@ -199,8 +202,11 @@ class TestAnswerJudgement:
         asyncio.run(run())
 
         interaction.response.send_message.assert_awaited_once()
-        args, kwargs = interaction.response.send_message.call_args
-        message: str = args[0] if args else kwargs.get("content", "")
+        _, kwargs = interaction.response.send_message.call_args
+        import discord as _discord
+        embed = kwargs.get("embed")
+        assert isinstance(embed, _discord.Embed)
+        message: str = embed.description or ""
         assert "×" in message
         assert "不正解" in message
         assert kwargs.get("ephemeral") is True

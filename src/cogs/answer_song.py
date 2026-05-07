@@ -26,7 +26,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from src.cogs._helpers import SongAutocomplete, build_song_autocomplete
+from src.cogs._helpers import (
+    SongAutocomplete,
+    build_error_embed,
+    build_song_autocomplete,
+    build_success_embed,
+)
 from src.core.config import get_assets_config
 from src.services.session import AnswerRecord, Session
 from src.services.session_manager import SessionManager
@@ -104,7 +109,9 @@ class AnswerSongCog(commands.Cog):
         session: Optional[Session] = manager.current()
         if session is None:
             await interaction.response.send_message(
-                "進行中のセッションがありません。/start で新しいセッションを開始してください。",
+                embed=build_error_embed(
+                    "進行中のセッションがありません。/start で新しいセッションを開始してください。"
+                ),
                 ephemeral=True,
             )
             return
@@ -112,7 +119,9 @@ class AnswerSongCog(commands.Cog):
         # ----- 2) 楽曲存在チェック (autocomplete を経由しない手入力に備える) -----
         if self._song_repository.find_by_name(song) is None:
             await interaction.response.send_message(
-                f"指定された楽曲が見つかりません: {song}",
+                embed=build_error_embed(
+                    f"指定された楽曲が見つかりません: {song}"
+                ),
                 ephemeral=True,
             )
             return
@@ -137,9 +146,15 @@ class AnswerSongCog(commands.Cog):
                 user_name=interaction.user.display_name,
             )
 
-        # ----- 5) ephemeral 応答 -----
+        # ----- 5) ephemeral 応答 (Bot からの送信は embed 統一) -----
+        # 正解時は green の success embed、不正解時は red の error embed で色分けして返す
+        embed = (
+            build_success_embed(_CORRECT_MESSAGE)
+            if is_correct
+            else build_error_embed(_INCORRECT_MESSAGE)
+        )
         await interaction.response.send_message(
-            _CORRECT_MESSAGE if is_correct else _INCORRECT_MESSAGE,
+            embed=embed,
             ephemeral=True,
         )
 

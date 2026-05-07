@@ -449,9 +449,13 @@ class TestNotifyWarning:
         asyncio.run(run())
 
         channel.send.assert_awaited_once()
-        # 警告分数 (config 既定: 10 分) が文字列に含まれる
-        args, _ = channel.send.call_args
-        assert "10" in args[0]
+        # Bot からの送信は embed 統一なので embed kwarg として渡る
+        import discord as _discord
+        kwargs = channel.send.call_args.kwargs
+        embed = kwargs.get("embed")
+        assert isinstance(embed, _discord.Embed)
+        # 警告分数 (config 既定: 10 分) が embed.description に含まれる
+        assert "10" in (embed.description or "")
 
     def test_send_failure_is_logged_but_does_not_raise(self):
         """送信失敗時もハンドラ全体を巻き込まない"""

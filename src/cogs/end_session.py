@@ -17,6 +17,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.cogs._helpers import build_error_embed, build_success_embed
 from src.services.image_processor import ImageProcessor
 from src.services.session_finalizer import SessionFinalizer
 from src.services.session_manager import SessionManager
@@ -77,7 +78,9 @@ class EndSessionCog(commands.Cog):
         session = manager.current()
         if session is None:
             await interaction.response.send_message(
-                "進行中のセッションがありません。/start で新しいセッションを開始してください。",
+                embed=build_error_embed(
+                    "進行中のセッションがありません。/start で新しいセッションを開始してください。"
+                ),
                 ephemeral=True,
             )
             return
@@ -87,7 +90,7 @@ class EndSessionCog(commands.Cog):
         if channel is None:
             # 通常 Slash Command はチャンネル付きで届くはずだが、念のため握りつぶさず警告
             await interaction.response.send_message(
-                "チャンネル外では実行できません。",
+                embed=build_error_embed("チャンネル外では実行できません。"),
                 ephemeral=True,
             )
             return
@@ -105,7 +108,9 @@ class EndSessionCog(commands.Cog):
         )
 
         await interaction.followup.send(
-            f"セッションを終了しました (楽曲: {session.song_name})。",
+            embed=build_success_embed(
+                f"セッションを終了しました (楽曲: {session.song_name})。"
+            ),
             ephemeral=True,
         )
 

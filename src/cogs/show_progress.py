@@ -18,6 +18,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.cogs._helpers import build_error_embed
 from src.services.session import Session
 from src.services.session_manager import SessionManager
 
@@ -79,7 +80,9 @@ class ShowProgressCog(commands.Cog):
 
         if session is None:
             await interaction.response.send_message(
-                "進行中のセッションがありません。/start で新しいセッションを開始してください。",
+                embed=build_error_embed(
+                    "進行中のセッションがありません。/start で新しいセッションを開始してください。"
+                ),
                 ephemeral=True,
             )
             return

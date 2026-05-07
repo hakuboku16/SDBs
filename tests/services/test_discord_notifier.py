@@ -72,7 +72,7 @@ class TestNotifyError:
     """`notify_error` の振る舞い"""
 
     def test_sends_message_only_when_no_exception(self):
-        """例外を渡さない場合は本文だけが送られる"""
+        """例外を渡さない場合は本文だけが embed の description に格納されて送られる"""
         channel = _make_async_send_channel()
         client = _make_client_with_text_channel({100: channel})
         notifier = DiscordNotifier(client, _make_config())
@@ -82,10 +82,14 @@ class TestNotifyError:
         client.get_channel.assert_called_once_with(100)
         channel.send.assert_awaited_once()
         kwargs = channel.send.await_args.kwargs
-        assert kwargs == {"content": "ハンドラで未捕捉のエラー"}
+        # Bot からの送信は embed 統一なので content は空、embed が渡る
+        assert kwargs.get("content") == ""
+        embed = kwargs.get("embed")
+        assert isinstance(embed, discord.Embed)
+        assert embed.description == "ハンドラで未捕捉のエラー"
 
     def test_sends_traceback_when_exception_provided(self):
-        """例外を渡すと traceback がコードブロックで付加される"""
+        """例外を渡すと traceback がコードブロックで embed の description に付加される"""
         channel = _make_async_send_channel()
         client = _make_client_with_text_channel({100: channel})
         notifier = DiscordNotifier(client, _make_config())
@@ -96,7 +100,8 @@ class TestNotifyError:
             _run(notifier.notify_error("発生箇所: /play", exc=exc))
 
         channel.send.assert_awaited_once()
-        sent: str = channel.send.await_args.kwargs["content"]
+        embed = channel.send.await_args.kwargs["embed"]
+        sent: str = embed.description or ""
         assert "発生箇所: /play" in sent
         assert "RuntimeError" in sent
         assert "テスト例外" in sent
@@ -104,7 +109,7 @@ class TestNotifyError:
         assert "```" in sent
 
     def test_truncates_overly_long_content(self):
-        """2000 文字を超える本文は切り詰められ、末尾 (例外発生箇所側) が残る"""
+        """4096 文字を超える本文は embed.description が切り詰められ、末尾 (発生箇所側) が残る"""
         channel = _make_async_send_channel()
         client = _make_client_with_text_channel({100: channel})
         notifier = DiscordNotifier(client, _make_config())
@@ -113,8 +118,10 @@ class TestNotifyError:
         long_message = "X" * 5000 + "MARKER_AT_TAIL"
         _run(notifier.notify_error(long_message))
 
-        sent: str = channel.send.await_args.kwargs["content"]
-        assert len(sent) <= 2000
+        embed = channel.send.await_args.kwargs["embed"]
+        sent: str = embed.description or ""
+        # embed.description の上限 (4096) を超えない
+        assert len(sent) <= 4096
         assert sent.endswith("MARKER_AT_TAIL")
         # 切り詰めマーカーが先頭側に挿入される
         assert "切り詰め" in sent
