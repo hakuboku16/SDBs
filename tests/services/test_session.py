@@ -104,6 +104,16 @@ class TestSessionInit:
         assert session.mosaic_block == 300
         assert session.play_records == []
         assert session.answer_records == []
+        # ピン留めメッセージ ID は /start 完了後に書き込むため初期値は None
+        assert session.pinned_message_id is None
+
+    def test_pinned_message_id_can_be_assigned(self):
+        """
+        pinned_message_id は後から書き込んで `/play`・`/end` から参照できる
+        """
+        session = _make_session()
+        session.pinned_message_id = 9876543210
+        assert session.pinned_message_id == 9876543210
 
     def test_panel_count_must_match_tasks(self):
         """
@@ -138,6 +148,17 @@ class TestSessionInit:
             PlayRecord(song_name="X", difficulty="Hard", charming=1, combo=1)
         )
         assert len(s2.play_records) == 0
+
+    def test_correct_answerers_default_is_empty_and_per_instance(self):
+        """
+        ``correct_answerers`` は default_factory で空集合となり、
+        インスタンス間で共有されない
+        """
+        s1 = _make_session()
+        s2 = _make_session()
+        assert s1.correct_answerers == set()
+        s1.correct_answerers.add((1, "alice"))
+        assert s2.correct_answerers == set()
 
 
 # ==================================================
@@ -219,3 +240,27 @@ class TestSessionRecords:
         session.add_answer(a1)
         session.add_answer(a2)
         assert session.answer_records == [a1, a2]
+
+    def test_add_correct_answerer_is_idempotent(self):
+        """
+        add_correct_answerer は同一 (user_id, user_name) に対し冪等
+        """
+        session = _make_session()
+        session.add_correct_answerer(101, "alice")
+        session.add_correct_answerer(101, "alice")
+        session.add_correct_answerer(202, "bob")
+        # 同一ユーザーの重複登録は集約され 2 件のみ
+        assert session.correct_answerers == {(101, "alice"), (202, "bob")}
+
+    def test_add_correct_answerer_treats_name_change_as_distinct(self):
+        """
+        同一 user_id でも user_name が異なれば別エントリとして登録される
+        (要件: ``set[tuple[int, str]]`` の比較は両要素一致時のみ)
+        """
+        session = _make_session()
+        session.add_correct_answerer(101, "alice")
+        session.add_correct_answerer(101, "alice_renamed")
+        assert session.correct_answerers == {
+            (101, "alice"),
+            (101, "alice_renamed"),
+        }

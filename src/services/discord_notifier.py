@@ -9,7 +9,7 @@ Discord チャンネルへの通知を担うモジュール
 import logging
 import traceback
 from io import BytesIO
-from typing import Optional
+from typing import Any, Iterable, Optional, cast
 
 import discord
 
@@ -35,6 +35,9 @@ class DiscordNotifier:
 
     # Discord メッセージ本文の最大長 (公式仕様: 2000 文字)
     _MAX_CONTENT_LENGTH: int = 2000
+
+    # Discord embed field 値の最大長 (公式仕様: 1024 文字)
+    _MAX_FIELD_LENGTH: int = 1024
 
     # 結果画像の Discord 添付ファイル名
     _RESULT_IMAGE_FILENAME: str = "session_result.png"
@@ -90,24 +93,60 @@ class DiscordNotifier:
         self,
         image: BytesIO,
         masked_song_name: str,
-        summary: str,
+        correct_answerers: Iterable[tuple[int, str]],
+        summary: Optional[str] = None,
     ) -> None:
         """
-        セッション終了時の結果を結果チャンネルへ通知する
+        セッション終了時の結果を結果チャンネルへ embed で通知する
+
+        embed 構成:
+            - title: マスク済みの楽曲名 (例: "***")
+            - description: 任意の補足テキスト (時間切れ表記など。None なら省略)
+            - image: 現状の合成パネル画像
+            - field "正解者": ``correct_answerers`` のユーザー名一覧。
+              0 件の場合は「正解者なし」を表示する。
 
         Args:
             image: 現状の合成画像 (PNG, シーク位置は呼び出し側で先頭にしておく)
             masked_song_name: マスク済みの楽曲名 (例: "***")
-            summary: 集計結果テキスト (回答ログなど)
+            correct_answerers: 正解者の ``(user_id, user_name)`` の反復子。
+                ``set`` 由来の場合は反復順が不定なため、内部で ``user_name`` 昇順に
+                ソートしてから表示する。
+            summary: embed description に出す補足文。``None`` なら設定しない。
         """
-        content: str = self._truncate(f"楽曲: {masked_song_name}\n{summary}")
+        # 反復順は呼び出し側 (set など) で不定の可能性があるため、表示安定化のため名前で昇順ソート
+        answerer_list: list[tuple[int, str]] = sorted(
+            correct_answerers, key=lambda pair: pair[1]
+        )
+
+        embed: discord.Embed = discord.Embed(
+            title=masked_song_name,
+            description=summary,
+        )
+        # 添付ファイルを embed の画像として参照する (attachment スキーム)
+        embed.set_image(url=f"attachment://{self._RESULT_IMAGE_FILENAME}")
+
+        if answerer_list:
+            answerer_text: str = "\n".join(
+                f"- {user_name}" for _, user_name in answerer_list
+            )
+        else:
+            answerer_text = "正解者なし"
+        # Discord field の値は 1024 文字制限があるため切り詰める
+        embed.add_field(
+            name="正解者",
+            value=self._truncate_field(answerer_text),
+            inline=False,
+        )
+
         # discord.File はラップ対象の BytesIO を消費するため毎回新規にラップする
         file: discord.File = discord.File(image, filename=self._RESULT_IMAGE_FILENAME)
         await self._send(
             channel_id=self._result_channel_id,
             channel_label="結果",
-            content=content,
+            content="",
             file=file,
+            embed=embed,
         )
 
     # --------------------------------------------------
@@ -119,6 +158,7 @@ class DiscordNotifier:
         channel_label: str,
         content: str,
         file: Optional[discord.File] = None,
+        embed: Optional[discord.Embed] = None,
     ) -> None:
         """
         指定チャンネルへ送信する。失敗時は握りつぶさずロガーに warning を残す。
@@ -128,6 +168,7 @@ class DiscordNotifier:
             channel_label: ログメッセージ用の人間可読な種別名 ("ログ" / "結果")
             content: 送信本文 (空文字でも可)
             file: 添付ファイル (省略可)
+            embed: 送信する embed (省略可)
         """
         if channel_id is None:
             logger.warning(
@@ -147,8 +188,8 @@ class DiscordNotifier:
             return
 
         # `send` を持たない型 (例: カテゴリ) は通知不能
-        send = getattr(channel, "send", None)
-        if not callable(send):
+        send_attr = getattr(channel, "send", None)
+        if not callable(send_attr):
             logger.warning(
                 "%sチャンネル (id=%s, type=%s) は send をサポートしていません。",
                 channel_label,
@@ -156,10 +197,19 @@ class DiscordNotifier:
                 type(channel).__name__,
             )
             return
+        # `getattr` の戻り値は object 型として推論され `await` の型推論が通らないため
+        # ここで `Any` にキャストして discord.py の awaitable シグネチャに追従させる
+        send = cast(Any, send_attr)
 
         try:
-            if file is not None:
+            # discord.py の send は省略時に sentinel が想定されているため、
+            # 実際に渡す組み合わせを分岐して呼ぶ (None を直接渡さない)
+            if file is not None and embed is not None:
+                await send(content=content, file=file, embed=embed)
+            elif file is not None:
                 await send(content=content, file=file)
+            elif embed is not None:
+                await send(content=content, embed=embed)
             else:
                 await send(content=content)
         except discord.DiscordException as e:
@@ -188,3 +238,22 @@ class DiscordNotifier:
             return content
         keep: int = cls._MAX_CONTENT_LENGTH - len(cls._TRUNCATE_MARKER)
         return cls._TRUNCATE_MARKER + content[-keep:]
+
+    @classmethod
+    def _truncate_field(cls, value: str) -> str:
+        """
+        Discord embed field 値の 1024 文字制限に収まるよう末尾を切り詰める
+
+        正解者リストでは先頭側 (アルファベット昇順の早い名前) を残した方が表示の
+        一貫性が保てるため、末尾側を切り詰める。
+
+        Args:
+            value: 切り詰め前の field 値
+
+        Returns:
+            切り詰め後の値 (元から短い場合はそのまま)
+        """
+        if len(value) <= cls._MAX_FIELD_LENGTH:
+            return value
+        keep: int = cls._MAX_FIELD_LENGTH - len(cls._TRUNCATE_MARKER)
+        return value[:keep] + cls._TRUNCATE_MARKER
