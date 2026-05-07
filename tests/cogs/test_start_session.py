@@ -381,20 +381,15 @@ class TestStartHappyPath:
 
 
 # ==================================================
-# 内部ヘルパー (_finalize_session / _notify_warning / _mask_song_name)
+# 内部ヘルパー (_finalize_session 委譲 / _notify_warning)
 # ==================================================
 class TestFinalizeSession:
-    """`on_timeout` 経由で呼ばれる内部処理の単体検証"""
-
-    def test_mask_song_name_replaces_with_asterisks(self):
-        """楽曲名は同じ長さの '*' 列にマスクされる"""
-        assert StartSessionCog._mask_song_name("Magnolia") == "*" * len("Magnolia")
-        # 空文字列でも最低 1 文字は返す
-        assert StartSessionCog._mask_song_name("") == "*"
+    """`on_timeout` 経由で呼ばれる内部処理の単体検証 (`SessionFinalizer` への委譲)"""
 
     def test_finalize_invokes_notifier_and_unpin_and_end(self):
         """
-        finalize は (1) 結果通知、(2) ピン解除、(3) SessionManager.end の順に実行する
+        finalize は (1) 結果通知、(2) ピン解除、(3) SessionManager.end の順に実行する。
+        実処理は `SessionFinalizer.finalize` 経由で行われる。
         """
         cog = _make_cog()
         # 既存セッションを SessionManager に登録 (タイマー無し)
@@ -413,8 +408,11 @@ class TestFinalizeSession:
 
         asyncio.run(run())
 
-        # 1) 結果通知が呼ばれた
+        # 1) 結果通知が呼ばれた (時間切れの summary 付き)
         _bot_mock(cog).notifier.notify_session_result.assert_awaited_once()
+        kwargs = _bot_mock(cog).notifier.notify_session_result.await_args.kwargs
+        assert kwargs["summary"] == "セッション終了 (時間切れ)"
+        assert kwargs["masked_song_name"] == "*" * len(session.song_name)
         # 2) ピン解除が呼ばれた
         channel.fetch_message.assert_awaited_once_with(42_42_42)
         pinned_msg.unpin.assert_awaited_once()

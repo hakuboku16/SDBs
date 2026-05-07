@@ -33,6 +33,7 @@ from src.core.config import (
 )
 from src.services.image_processor import ImageProcessor
 from src.services.session import Session
+from src.services.session_finalizer import SessionFinalizer
 from src.services.session_manager import SessionManager
 from src.services.song_repository import SongRepository
 from src.services.task_generator import TaskGenerator
@@ -87,6 +88,7 @@ class StartSessionCog(commands.Cog):
         image_processor: ImageProcessor,
         session_config: SessionConfig,
         discord_config: DiscordConfig,
+        session_finalizer: Optional[SessionFinalizer] = None,
         rng: Optional[random.Random] = None,
     ) -> None:
         """
@@ -99,6 +101,8 @@ class StartSessionCog(commands.Cog):
             image_processor: 画像プロセッサ (初期画像合成 / 終了時の最終画像合成)
             session_config: セッション設定 (許容パネル数 / モザイクレベル)
             discord_config: Discord 設定 (タイマー秒数の算出に使用)
+            session_finalizer: セッション終了処理 (`/end` と自動終了で共通)。
+                省略時は ``image_processor`` を使った既定インスタンスを生成する。
             rng: 楽曲のランダム選択に用いる乱数生成器。テスト時に固定 seed を渡せます
         """
         super().__init__()
@@ -108,6 +112,11 @@ class StartSessionCog(commands.Cog):
         self._image_processor: ImageProcessor = image_processor
         self._session_config: SessionConfig = session_config
         self._discord_config: DiscordConfig = discord_config
+        self._session_finalizer: SessionFinalizer = (
+            session_finalizer
+            if session_finalizer is not None
+            else SessionFinalizer(image_processor=image_processor)
+        )
         self._rng: random.Random = rng if rng is not None else random.Random()
 
     # --------------------------------------------------
@@ -309,78 +318,17 @@ class StartSessionCog(commands.Cog):
         """
         セッション制限時間到達時の自動終了処理 (`/end` と同等)
 
-        - 現状のクリア状況で最終画像を再合成し結果チャンネルへ通知
-        - ピン留めメッセージのピンを解除
-        - `SessionManager.end()` でセッションを破棄
-
-        既に手動 `/end` 等で終了済みの場合は何もしない (二重終了防止)。
+        実処理は `SessionFinalizer.finalize` に委譲します (手動 /end と共通化)。
+        ``summary`` には時間切れである旨を含めて区別します。
+        既に手動 `/end` 等で終了済みの場合は finalizer 側で no-op となります。
         """
-        manager: SessionManager = SessionManager.instance()
-        if not manager.is_active():
-            return
-
-        # ----- 最終画像合成 (現状のクリア済みパネルを反映) -----
-        try:
-            final_image = self._image_processor.compose(
-                song_name=session.song_name,
-                panel_count=session.panel_count,
-                cleared_indices=session.cleared_panel_indices(),
-                rotate=session.rotate,
-                grayscale=session.grayscale,
-                mosaic_block=session.mosaic_block,
-            )
-        except (FileNotFoundError, ValueError) as e:
-            logger.warning("自動終了時の画像合成に失敗しました: %s", e)
-            final_image = None
-
-        # ----- 結果チャンネルへ通知 -----
         notifier = getattr(self.bot, "notifier", None)
-        if notifier is not None and final_image is not None:
-            await notifier.notify_session_result(
-                image=final_image,
-                masked_song_name=self._mask_song_name(session.song_name),
-                summary="セッション終了 (時間切れ)",
-            )
-
-        # ----- ピン解除 -----
-        if session.pinned_message_id is not None:
-            await self._unpin_message(channel, session.pinned_message_id)
-
-        # ----- セッション破棄 -----
-        manager.end()
-
-    @staticmethod
-    async def _unpin_message(
-        channel: discord.abc.Messageable, message_id: int
-    ) -> None:
-        """
-        指定メッセージのピンを解除する。失敗時は warning に残し処理を継続。
-        """
-        try:
-            # `discord.abc.Messageable` 自体には fetch_message が定義されないが、
-            # 実体 (TextChannel / Thread / DMChannel 等) は持つため getattr で取得する
-            fetch = getattr(channel, "fetch_message", None)
-            if not callable(fetch):
-                logger.warning(
-                    "チャンネル (type=%s) は fetch_message をサポートしていないためピン解除をスキップします",
-                    type(channel).__name__,
-                )
-                return
-            message = await fetch(message_id)
-            await message.unpin()
-        except discord.DiscordException as e:
-            logger.warning("ピン解除に失敗しました (message_id=%s): %s", message_id, e)
-
-    @staticmethod
-    def _mask_song_name(name: str) -> str:
-        """
-        楽曲名をマスクする (`/end` 時の結果表示用)
-
-        例: "Magnolia" -> "********"
-        """
-        if not name:
-            return "*"
-        return "*" * len(name)
+        await self._session_finalizer.finalize(
+            session,
+            channel,
+            notifier,
+            summary="セッション終了 (時間切れ)",
+        )
 
 
 # ==================================================

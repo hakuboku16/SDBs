@@ -345,7 +345,7 @@ ENVIRONMENT=development
       - 投稿メッセージをピン留めし、メッセージ ID を `Session` に保持する
       - SessionManager の `on_warning` に「残り10分」のチャンネル通知を、`on_timeout` に `/end` と同等処理（結果通知 + ピン解除）を登録
       - テスト: [tests/cogs/test_start_session.py](tests/cogs/test_start_session.py)（既セッション存在時の拒否、引数バリデーション、ピン留め呼び出し、コールバック登録）
-    - [ ] **5.3: `/end`**（[src/cogs/end_session.py](src/cogs/end_session.py)）
+    - [x] **5.3: `/end`**（[src/cogs/end_session.py](src/cogs/end_session.py)）
       - 現セッションが無い場合は ephemeral でエラー応答
       - 結果チャンネルへ embed を投稿:
         - タイトル: マスク済み楽曲名（例: `*****`）

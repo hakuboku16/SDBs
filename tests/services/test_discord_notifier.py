@@ -126,8 +126,10 @@ class TestNotifyError:
 class TestNotifySessionResult:
     """`notify_session_result` の振る舞い"""
 
-    def test_sends_image_and_summary(self):
-        """マスク済み楽曲名と集計テキスト、画像 (discord.File) が結果チャンネルへ送られる"""
+    def test_sends_embed_with_masked_title_and_image_attachment(self):
+        """
+        マスク済み楽曲名を embed タイトルに、合成画像を添付 + embed.image として送る
+        """
         channel = _make_async_send_channel()
         client = _make_client_with_text_channel({200: channel})
         notifier = DiscordNotifier(client, _make_config())
@@ -137,19 +139,69 @@ class TestNotifySessionResult:
         _run(
             notifier.notify_session_result(
                 image=image,
-                masked_song_name="***",
-                summary="参加者: 3 / 正解: 1",
+                masked_song_name="*****",
+                correct_answerers=[(1, "alice"), (2, "bob")],
+                summary="セッション終了",
             )
         )
 
         client.get_channel.assert_called_once_with(200)
         channel.send.assert_awaited_once()
         kwargs = channel.send.await_args.kwargs
-        assert "***" in kwargs["content"]
-        assert "参加者: 3 / 正解: 1" in kwargs["content"]
+
+        # embed が渡される
+        embed = kwargs["embed"]
+        assert isinstance(embed, discord.Embed)
+        assert embed.title == "*****"
+        assert embed.description == "セッション終了"
+        # embed.image.url は attachment スキーム
+        assert embed.image.url == "attachment://session_result.png"
+        # 正解者 field が含まれる
+        fields = {f.name: f.value or "" for f in embed.fields}
+        assert "正解者" in fields
+        assert "alice" in fields["正解者"]
+        assert "bob" in fields["正解者"]
+
         # 添付ファイルは discord.File で渡る
         assert isinstance(kwargs["file"], discord.File)
         assert kwargs["file"].filename == "session_result.png"
+
+    def test_shows_no_answerers_label_when_empty(self):
+        """正解者が 0 件の場合は「正解者なし」と表示する"""
+        channel = _make_async_send_channel()
+        client = _make_client_with_text_channel({200: channel})
+        notifier = DiscordNotifier(client, _make_config())
+
+        _run(
+            notifier.notify_session_result(
+                image=BytesIO(b"x"),
+                masked_song_name="***",
+                correct_answerers=set(),
+            )
+        )
+
+        embed = channel.send.await_args.kwargs["embed"]
+        fields = {f.name: f.value for f in embed.fields}
+        assert fields["正解者"] == "正解者なし"
+
+    def test_sorts_answerers_by_user_name(self):
+        """``set`` 入力でも user_name 昇順で安定表示する"""
+        channel = _make_async_send_channel()
+        client = _make_client_with_text_channel({200: channel})
+        notifier = DiscordNotifier(client, _make_config())
+
+        _run(
+            notifier.notify_session_result(
+                image=BytesIO(b"x"),
+                masked_song_name="***",
+                correct_answerers={(3, "charlie"), (1, "alice"), (2, "bob")},
+            )
+        )
+
+        embed = channel.send.await_args.kwargs["embed"]
+        value = next(f.value or "" for f in embed.fields if f.name == "正解者")
+        # alice → bob → charlie の順に並ぶ
+        assert value.index("alice") < value.index("bob") < value.index("charlie")
 
 
 # ==================================================
@@ -179,6 +231,7 @@ class TestSkipsAndWarnings:
                 notifier.notify_session_result(
                     image=BytesIO(b"x"),
                     masked_song_name="***",
+                    correct_answerers=[],
                     summary="dummy",
                 )
             )

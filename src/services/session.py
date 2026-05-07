@@ -84,6 +84,9 @@ class Session:
         mosaic_block: モザイクの block 画素数 (大きいほど弱い)
         play_records: /play で蓄積するプレイ履歴 (時系列)
         answer_records: /answer の全回答履歴 (時系列)
+        correct_answerers: /answer で正解した (user_id, user_name) のセット (重複排除)。
+            `/end` 時の結果 embed の正解者欄に表示する。`add_correct_answerer` 経由で
+            追加することで冪等性 (同一ユーザーの重複登録抑止) を担保する。
         pinned_message_id: ピン留めしたタスク提示メッセージの ID。
             `/start` 時に投稿/ピン留めしたメッセージ ID を後段の `/play` (画像差し替え) や
             `/end` / `/reset` (ピン解除) から参照する。`/start` 内でメッセージ送信が完了する
@@ -101,6 +104,7 @@ class Session:
     mosaic_block: int = 300
     play_records: list[PlayRecord] = field(default_factory=list)
     answer_records: list[AnswerRecord] = field(default_factory=list)
+    correct_answerers: set[tuple[int, str]] = field(default_factory=set)
     pinned_message_id: Optional[int] = None
 
     def __post_init__(self) -> None:
@@ -157,3 +161,16 @@ class Session:
         回答履歴を追加する
         """
         self.answer_records.append(record)
+
+    def add_correct_answerer(self, user_id: int, user_name: str) -> None:
+        """
+        正解者を ``correct_answerers`` に追加する
+
+        ``set`` を内部実装に用いるため、同一 ``user_id`` / ``user_name`` の組は
+        2 度追加しても冪等となる (重複登録なし)。
+
+        Args:
+            user_id: 正解した Discord ユーザー ID
+            user_name: 正解した Discord ユーザーの表示名
+        """
+        self.correct_answerers.add((user_id, user_name))
