@@ -361,7 +361,7 @@ ENVIRONMENT=development
       - 現セッションのタスク一覧 + 進捗を embed で表示。各 task は `current/set_value` 形式、cleared 済みは記号で視覚化
       - セッション無し時は ephemeral でエラー応答
       - テスト: [tests/cogs/test_show_progress.py](tests/cogs/test_show_progress.py)
-    - [ ] **5.6: `/play`**（[src/cogs/input_play.py](src/cogs/input_play.py)）
+    - [x] **5.6: `/play`**（[src/cogs/input_play.py](src/cogs/input_play.py)）
       - 引数: `song`（autocomplete）, `difficulty`, `charming`, `combo`（`is_natural_number` でバリデーション）
       - `PlayRecord` を生成しセッションに追加 → 全タスクを `TaskEvaluator` で評価 → 進捗のあったタスクを embed で返答
       - パネルが新たに剥がれていれば `ImageProcessor.compose` で画像を再合成し、ピン留めメッセージを編集（添付画像差し替え）
