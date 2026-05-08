@@ -77,9 +77,15 @@ class ResetSessionCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         # ----- ピン解除 (失敗しても reset は続行) -----
+        # interaction.channel は CategoryChannel / ForumChannel (非 Messageable) も
+        # 含む union 型のため、Messageable へナローしてから渡す。
         if session.pinned_message_id is not None:
+            channel = interaction.channel
+            channel_for_unpin: Optional[discord.abc.Messageable] = (
+                channel if isinstance(channel, discord.abc.Messageable) else None
+            )
             await self._unpin_message(
-                interaction.channel, session.pinned_message_id
+                channel_for_unpin, session.pinned_message_id
             )
 
         # ----- セッション破棄 (タイマーも cancel される) -----
@@ -100,8 +106,6 @@ class ResetSessionCog(commands.Cog):
         """
         指定メッセージのピン解除を試みる。失敗時は warning に残し処理を継続する。
 
-        `discord.abc.Messageable` 自体には `fetch_message` は定義されていないが、
-        実装型 (TextChannel / Thread / DMChannel 等) は持つため `getattr` で取得する。
         要件「エラーは握りつぶさず、意味のあるメッセージ付きで処理する」に従い、
         失敗ケースは warning ログを残してから抜ける。
         """
@@ -111,16 +115,8 @@ class ResetSessionCog(commands.Cog):
                 message_id,
             )
             return
-        fetch = getattr(channel, "fetch_message", None)
-        if not callable(fetch):
-            logger.warning(
-                "チャンネル (type=%s) は fetch_message をサポートしていないため"
-                "ピン解除をスキップします",
-                type(channel).__name__,
-            )
-            return
         try:
-            message = await fetch(message_id)
+            message = await channel.fetch_message(message_id)
             await message.unpin()
         except discord.DiscordException as e:
             logger.warning(

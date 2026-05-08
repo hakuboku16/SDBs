@@ -62,9 +62,12 @@ def make_mock_interaction(
     interaction.user = user
 
     # チャンネル / Guild
+    # cog 側で `isinstance(channel, discord.abc.Messageable)` でナローしている箇所が
+    # あるため、spec に `discord.TextChannel` (Messageable のサブクラス) を指定して
+    # isinstance チェックを通るようにする。
     interaction.channel_id = channel_id
     interaction.guild_id = guild_id
-    interaction.channel = MagicMock()
+    interaction.channel = MagicMock(spec=discord.TextChannel)
     interaction.channel.id = channel_id
 
     # response (送信前応答)

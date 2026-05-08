@@ -139,20 +139,9 @@ class SessionFinalizer:
     ) -> None:
         """
         指定メッセージのピンを解除する。失敗時は warning に残し処理を継続する。
-
-        `discord.abc.Messageable` 自体には `fetch_message` は定義されていないが、
-        実装型 (TextChannel / Thread / DMChannel 等) は持つため `getattr` で取得する。
         """
-        fetch = getattr(channel, "fetch_message", None)
-        if not callable(fetch):
-            logger.warning(
-                "チャンネル (type=%s) は fetch_message をサポートしていないため"
-                "ピン解除をスキップします",
-                type(channel).__name__,
-            )
-            return
         try:
-            message = await fetch(message_id)
+            message = await channel.fetch_message(message_id)
             await message.unpin()
         except discord.DiscordException as e:
             logger.warning(

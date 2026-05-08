@@ -197,14 +197,14 @@ class TestResetUnpinFailureCases:
         assert SessionManager.instance().is_active() is False
         interaction.followup.send.assert_awaited_once()
 
-    def test_resets_when_channel_lacks_fetch_message(self, caplog):
-        """`fetch_message` を持たない (callable でない) チャンネルでは warning + 続行"""
+    def test_resets_when_channel_not_messageable(self, caplog):
+        """`Messageable` でないチャンネル (CategoryChannel 等) では warning + 続行"""
         cog = _make_cog()
         SessionManager.instance().start(_make_session(pinned_message_id=42))
 
         interaction = make_mock_interaction()
-        # `fetch_message` 属性自体を非 callable で上書き
-        interaction.channel = MagicMock(spec=[])  # 属性無しの mock
+        # CategoryChannel は Messageable ではないため isinstance チェックで弾かれる
+        interaction.channel = MagicMock(spec=discord.CategoryChannel)
 
         with caplog.at_level(logging.WARNING, logger="src.cogs.reset_session"):
 
@@ -213,9 +213,8 @@ class TestResetUnpinFailureCases:
 
             asyncio.run(run())
 
-        assert any(
-            "fetch_message" in rec.getMessage() for rec in caplog.records
-        )
+        # warning ログに message_id が含まれる (チャンネル取得不可と同じ経路)
+        assert any("42" in rec.getMessage() for rec in caplog.records)
         assert SessionManager.instance().is_active() is False
         interaction.followup.send.assert_awaited_once()
 

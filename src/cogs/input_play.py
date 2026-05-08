@@ -295,24 +295,24 @@ class InputPlayCog(commands.Cog):
             return
 
         # ----- メッセージ編集 -----
+        # interaction.channel は CategoryChannel / ForumChannel (非 Messageable) も
+        # 含む union 型のため、Messageable へナローしてから fetch_message を呼ぶ。
         channel = interaction.channel
         if channel is None:
             logger.warning(
                 "interaction.channel が None のためピン留めメッセージを更新できません"
             )
             return
-        fetch = getattr(channel, "fetch_message", None)
-        if not callable(fetch):
-            # DM など fetch_message を持たないチャンネルでは何もしない
+        if not isinstance(channel, discord.abc.Messageable):
             logger.warning(
-                "チャンネル (type=%s) は fetch_message をサポートしていないため"
+                "チャンネル (type=%s) は Messageable ではないため"
                 "画像更新をスキップします",
                 type(channel).__name__,
             )
             return
 
         try:
-            message = await fetch(session.pinned_message_id)
+            message = await channel.fetch_message(session.pinned_message_id)
             file = discord.File(buffer, filename=_PANEL_IMAGE_FILENAME)
             # attachments を新しい File 1 件で上書き → 既存添付を差し替える
             await message.edit(attachments=[file])

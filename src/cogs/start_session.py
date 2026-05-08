@@ -137,10 +137,10 @@ class StartSessionCog(commands.Cog):
         grayscale="画像をグレースケール化するか",
         mosaic="モザイクの強さ (なし / 弱 / 中 / 強 / 最強)",
     )
-    @app_commands.choices(
-        panels=_PANEL_CHOICES,
-        mosaic=_MOSAIC_CHOICES,
-    )
+    # `app_commands.choices` は単一の ChoiceT に束縛されるため、
+    # int (panels) と str (mosaic) でデコレータを分けて適用する。
+    @app_commands.choices(panels=_PANEL_CHOICES)
+    @app_commands.choices(mosaic=_MOSAIC_CHOICES)
     async def start(
         self,
         interaction: discord.Interaction,
@@ -195,10 +195,20 @@ class StartSessionCog(commands.Cog):
             return
 
         # ----- 3) チャンネル検証 -----
+        # interaction.channel は CategoryChannel / ForumChannel (非 Messageable) も含む
+        # union 型のため、Messageable へナローして以降の send / fetch を型安全にする。
         channel = interaction.channel
         if interaction.channel_id is None or channel is None:
             await interaction.response.send_message(
                 embed=build_error_embed("チャンネル外では実行できません。"),
+                ephemeral=True,
+            )
+            return
+        if not isinstance(channel, discord.abc.Messageable):
+            await interaction.response.send_message(
+                embed=build_error_embed(
+                    "メッセージを送信できないチャンネルでは実行できません。"
+                ),
                 ephemeral=True,
             )
             return
