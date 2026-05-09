@@ -23,8 +23,8 @@ import pytest
 from src.cogs.reset_session import ResetSessionCog
 from src.services.session import Session
 from src.services.session_manager import SessionManager
-from src.services.task import Task
 from tests.cogs.conftest import make_mock_interaction
+from tests.conftest import make_task
 
 
 # ==================================================
@@ -44,7 +44,7 @@ def _make_session(*, pinned_message_id: int | None = 42) -> Session:
     return Session(
         song_name="Magnolia",
         panel_count=1,
-        tasks=[Task(type="level", set_value=1, value=5)],
+        tasks=[make_task(type="level", set_value=1, value=5)],
         channel_id=2001,
         owner_id=1001,
         started_at=datetime(2026, 5, 7, tzinfo=timezone.utc),

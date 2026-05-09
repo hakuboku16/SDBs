@@ -20,7 +20,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 from src.services.song_repository import SongRepository
-from src.services.task import Task
+from src.services.task import PlayQuality, Task
+
+# プレイ品質の重み付き抽選候補。
+# 仕様: AC 1割 / FC 3割 / プレイ 6割 の比率で 1 件抽選する。
+_PLAY_QUALITY_CANDIDATES: tuple[PlayQuality, ...] = ("AC", "FC", "プレイ")
+_PLAY_QUALITY_WEIGHTS: tuple[int, ...] = (1, 3, 6)
 
 
 # ==================================================
@@ -131,17 +136,47 @@ class TaskGenerator:
     def _build_task(self, topic: dict[str, Any]) -> Task:
         """
         単一のお題マスターから `Task` を組み立てる
+
+        ``description`` フィールドはそのまま `Task.description_template` に伝搬し、
+        cog 層で placeholder (value / set / play) を実値に置換する。
+        ``play_quality`` は ``_sample_play_quality`` で重み付き抽選する。
         """
         if "type" not in topic:
             raise ValueError(f"お題に type フィールドがありません: {topic}")
         if "set" not in topic:
             raise ValueError(f"お題 '{topic['type']}' に set フィールドがありません")
+        if "description" not in topic:
+            raise ValueError(
+                f"お題 '{topic['type']}' に description フィールドがありません"
+            )
 
         return Task(
             type=str(topic["type"]),
             set_value=self._sample_set_value(topic["set"]),
             value=self._sample_value(topic.get("value")),
+            play_quality=self._sample_play_quality(),
+            description_template=str(topic["description"]),
         )
+
+    # --------------------------------------------------
+    # play_quality 抽選
+    # --------------------------------------------------
+    def _sample_play_quality(self) -> PlayQuality:
+        """
+        重み付きでプレイ品質を 1 件抽選する
+
+        重みは ``_PLAY_QUALITY_WEIGHTS`` (AC=1 / FC=3 / プレイ=6) の比率で、
+        ``Random.choices`` を介して 1 件のみ取り出す。
+
+        Returns:
+            "AC" / "FC" / "プレイ" のいずれか
+        """
+        # `random.choices` は list を返すため [0] で 1 要素取り出す
+        return self._rng.choices(
+            _PLAY_QUALITY_CANDIDATES,
+            weights=_PLAY_QUALITY_WEIGHTS,
+            k=1,
+        )[0]
 
     # --------------------------------------------------
     # set_value サンプリング

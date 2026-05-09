@@ -98,8 +98,10 @@ class ShowProgressCog(commands.Cog):
         """
         セッションのタスク進捗を embed として組み立てる
 
-        各タスクは ``[symbol] index. type(value): current/set_value`` 形式で
-        1 行ずつ description に列挙します。``value`` が None のタスクは値部分を省略します。
+        各タスクは
+        ``"{symbol} {index}. ({current}/{set_value}) {description (placeholder 置換済)}"``
+        形式で 1 行ずつ description に列挙します。``description`` は
+        ``Task.format_description`` により value/set/play を実値に置換します。
 
         Args:
             session: 進捗を表示するセッション
@@ -114,10 +116,10 @@ class ShowProgressCog(commands.Cog):
         lines: list[str] = []
         for index, task in enumerate(session.tasks, start=1):
             symbol = _CLEARED_SYMBOL if task.cleared else _NOT_CLEARED_SYMBOL
-            value_part = f" ({task.value})" if task.value is not None else ""
+            # `(進捗/目標値)` を description の前に付与
             lines.append(
-                f"{symbol} {index}. {task.type}{value_part}: "
-                f"{task.current}/{task.set_value}"
+                f"{symbol} {index}. ({task.current}/{task.set_value}) "
+                f"{task.format_description()}"
             )
 
         body: str = "\n".join(lines)

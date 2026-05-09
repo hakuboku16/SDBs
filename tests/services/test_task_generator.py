@@ -114,9 +114,21 @@ def fake_song_repo(tmp_path: Path) -> SongRepository:
 def _write_topics(tmp_path: Path, topics: list[dict]) -> Path:
     """
     ヘルパー: 任意のお題定義をテンポラリの JSON に書き出してパスを返す
+
+    description は Task 生成時に必須となったため、テストで明示指定が無い場合は
+    placeholder を含むダミー文字列を補完する (description 自体の検証はしない)。
     """
+    enriched = [
+        {
+            **t,
+            "description": t.get(
+                "description", "テスト用 description value をset回play"
+            ),
+        }
+        for t in topics
+    ]
     path = tmp_path / "topics.json"
-    path.write_text(json.dumps(topics, ensure_ascii=False), encoding="utf-8")
+    path.write_text(json.dumps(enriched, ensure_ascii=False), encoding="utf-8")
     return path
 
 
@@ -635,6 +647,93 @@ class TestValueNone:
         )
         task = gen.generate(panel_count=1)[0]
         assert task.value is None
+
+
+# ==================================================
+# play_quality 抽選 / description_template 伝搬
+# ==================================================
+class TestPlayQualityAndDescription:
+    """
+    `_sample_play_quality` の重み付き抽選と、
+    `description_template` が Task に正しく伝搬される挙動
+    """
+
+    def test_play_quality_is_one_of_three(
+        self, tmp_path: Path, fake_song_repo: SongRepository
+    ):
+        """
+        生成された Task の play_quality は AC / FC / プレイ のいずれか
+        """
+        topics = [{"type": "level_total", "set": [1, 1, 1], "value": None}]
+        gen = TaskGenerator(
+            topics_json=_write_topics(tmp_path, topics),
+            song_repository=fake_song_repo,
+            rng=random.Random(0),
+        )
+        task = gen.generate(panel_count=1)[0]
+        assert task.play_quality in {"AC", "FC", "プレイ"}
+
+    def test_play_quality_distribution_matches_weights(
+        self, tmp_path: Path, fake_song_repo: SongRepository
+    ):
+        """
+        十分な試行回数で AC:1 / FC:3 / プレイ:6 の比率に近づく
+        (各カテゴリ ±2.5% 以内に収まることを確認)
+        """
+        topics = [{"type": "level_total", "set": [1, 1, 1], "value": None}]
+        gen = TaskGenerator(
+            topics_json=_write_topics(tmp_path, topics),
+            song_repository=fake_song_repo,
+            rng=random.Random(12345),
+        )
+        n = 10000
+        counts = {"AC": 0, "FC": 0, "プレイ": 0}
+        for _ in range(n):
+            counts[gen._sample_play_quality()] += 1
+
+        # 期待: AC=0.1, FC=0.3, プレイ=0.6
+        assert abs(counts["AC"] / n - 0.1) < 0.025
+        assert abs(counts["FC"] / n - 0.3) < 0.025
+        assert abs(counts["プレイ"] / n - 0.6) < 0.025
+
+    def test_description_template_is_propagated(
+        self, tmp_path: Path, fake_song_repo: SongRepository
+    ):
+        """
+        description フィールドはそのまま Task.description_template に伝搬される
+        """
+        topics = [
+            {
+                "type": "level_total",
+                "set": [1, 1, 1],
+                "value": None,
+                "description": "playした譜面のレベルの合計がset",
+            }
+        ]
+        gen = TaskGenerator(
+            topics_json=_write_topics(tmp_path, topics),
+            song_repository=fake_song_repo,
+            rng=random.Random(0),
+        )
+        task = gen.generate(panel_count=1)[0]
+        assert task.description_template == "playした譜面のレベルの合計がset"
+
+    def test_missing_description_raises(
+        self, tmp_path: Path, fake_song_repo: SongRepository
+    ):
+        """
+        お題に description フィールドが無いと ValueError
+        (`_write_topics` を経由せず生 JSON を書き出して検証)
+        """
+        path = tmp_path / "topics.json"
+        topics = [{"type": "level_total", "set": [1, 1, 1], "value": None}]
+        path.write_text(json.dumps(topics, ensure_ascii=False), encoding="utf-8")
+        gen = TaskGenerator(
+            topics_json=path,
+            song_repository=fake_song_repo,
+        )
+        with pytest.raises(ValueError, match="description"):
+            gen.generate(panel_count=1)
 
 
 # ==================================================

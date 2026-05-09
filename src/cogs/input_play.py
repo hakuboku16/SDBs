@@ -336,7 +336,9 @@ class InputPlayCog(commands.Cog):
         進捗のあったタスクを列挙する embed を組み立てる
 
         - 進捗のないプレイは ``description`` に「進捗のあったタスクはありません。」
-        - 進捗があった場合は 1 行 1 タスクで ``current/set_value`` と新規 cleared フラグを表示
+        - 進捗があった場合は 1 行 1 タスクで以下フォーマット:
+          ``"{index}. ({current}/{set_value}) {description (placeholder 置換済)}{[クリア!]}"``
+          ``description`` は ``Task.format_description`` により value/set/play を実値に置換。
 
         Args:
             record: 入力された `PlayRecord` (タイトル表示に利用)
@@ -355,12 +357,10 @@ class InputPlayCog(commands.Cog):
             lines: list[str] = []
             for index, task, newly_cleared in progressed:
                 marker: str = " [クリア!]" if newly_cleared else ""
-                value_part: str = (
-                    f" ({task.value})" if task.value is not None else ""
-                )
+                # `(進捗/目標値)` を description の前に付与
                 lines.append(
-                    f"{index + 1}. {task.type}{value_part}: "
-                    f"{task.current}/{task.set_value}{marker}"
+                    f"{index + 1}. ({task.current}/{task.set_value}) "
+                    f"{task.format_description()}{marker}"
                 )
             description = "\n".join(lines)
             if len(description) > _DESCRIPTION_LIMIT:

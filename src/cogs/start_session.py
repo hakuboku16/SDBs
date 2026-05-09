@@ -332,8 +332,10 @@ class StartSessionCog(commands.Cog):
             "**お題**",
         ]
         for index, task in enumerate(session.tasks, start=1):
+            # `Task.format_description` で value/set/play placeholder を実値に置換した
+            # ユーザー向け文章 (例: 「ノーツ密度が5.0[notes/s]以上の譜面を持つ楽曲を3回プレイ」)
             description_lines.append(
-                f"{index}. {task.type} (set={task.set_value})"
+                f"{index}. {task.format_description()}"
             )
         return discord.Embed(
             title="セッション開始",

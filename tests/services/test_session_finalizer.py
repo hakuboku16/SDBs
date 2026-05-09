@@ -24,6 +24,7 @@ from src.services.session import Session
 from src.services.session_finalizer import SessionFinalizer
 from src.services.session_manager import SessionManager
 from src.services.task import Task
+from tests.conftest import make_task
 
 
 # ==================================================
@@ -31,7 +32,7 @@ from src.services.task import Task
 # ==================================================
 def _make_task() -> Task:
     """副作用のないシンプルな Task"""
-    return Task(type="level", set_value=1, value=5)
+    return make_task(type="level", set_value=1, value=5)
 
 
 def _make_session(*, pinned_message_id: int | None = 12345) -> Session:

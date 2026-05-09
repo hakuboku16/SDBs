@@ -25,6 +25,7 @@ from src.services.session import Session
 from src.services.session_manager import SessionManager
 from src.services.task import Task
 from tests.cogs.conftest import make_mock_interaction
+from tests.conftest import make_task
 
 
 # ==================================================
@@ -104,9 +105,30 @@ class TestProgressHappyPath:
         cog = _make_cog()
         # cleared 1 件 / 未 cleared 2 件 を含むタスクを用意
         tasks = [
-            Task(type="level", set_value=1, value=5, current=1),  # cleared
-            Task(type="title_include", set_value=3, value=["a", "b"], current=1),
-            Task(type="level_total", set_value=100, value=None, current=20),
+            make_task(
+                type="level",
+                set_value=1,
+                value=5,
+                current=1,
+                play_quality="プレイ",
+                description_template="Lv.valueの譜面を持つ楽曲をset回play",
+            ),  # cleared
+            make_task(
+                type="title_include",
+                set_value=3,
+                value=["a", "b"],
+                current=1,
+                play_quality="AC",
+                description_template="楽曲名にvalueのすべてが含まれる楽曲をset回play",
+            ),
+            make_task(
+                type="level_total",
+                set_value=100,
+                value=None,
+                current=20,
+                play_quality="プレイ",
+                description_template="playした譜面のレベルの合計がset",
+            ),
         ]
         session = _make_session(tasks)
         SessionManager.instance().start(session)
@@ -136,21 +158,24 @@ class TestProgressHappyPath:
 
         # description に各タスクが 1 行ずつ含まれる
         description = embed.description or ""
-        # cleared タスク: ✓ + 1/1
-        assert "✓ 1. level (5): 1/1" in description
-        # 未 cleared タスク (value あり)
-        assert "□ 2. title_include (['a', 'b']): 1/3" in description
-        # 未 cleared タスク (value None) → value 部分は省略
-        assert "□ 3. level_total: 20/100" in description
-        # value が None のタスクには `()` が出現しないこと
-        assert "level_total ()" not in description
+        # cleared タスク: ✓ + (1/1) + 整形済み description
+        assert (
+            "✓ 1. (1/1) Lv.5の譜面を持つ楽曲を1回プレイ" in description
+        )
+        # 未 cleared タスク (value list, AC quality)
+        assert (
+            "□ 2. (1/3) 楽曲名に(a, b)のすべてが含まれる楽曲を3回AC"
+            in description
+        )
+        # 未 cleared タスク (value None / 累積系)
+        assert "□ 3. (20/100) プレイした譜面のレベルの合計が100" in description
 
     def test_all_cleared_tasks_use_cleared_symbol(self):
         """全タスク cleared なら全行が ✓ で始まり、タイトルが N/N となる"""
         cog = _make_cog()
         tasks = [
-            Task(type="level", set_value=1, value=5, current=1),
-            Task(type="version", set_value=1, value=None, current=1),
+            make_task(type="level", set_value=1, value=5, current=1),
+            make_task(type="version", set_value=1, value=None, current=1),
         ]
         SessionManager.instance().start(_make_session(tasks))
         interaction = make_mock_interaction()
@@ -174,8 +199,8 @@ class TestProgressHappyPath:
         """未 cleared のみなら全行が □ で始まり、タイトルが 0/N となる"""
         cog = _make_cog()
         tasks = [
-            Task(type="level", set_value=3, value=5, current=0),
-            Task(type="title_include", set_value=2, value=["a"], current=0),
+            make_task(type="level", set_value=3, value=5, current=0),
+            make_task(type="title_include", set_value=2, value=["a"], current=0),
         ]
         SessionManager.instance().start(_make_session(tasks))
         interaction = make_mock_interaction()
@@ -205,7 +230,13 @@ class TestProgressDescriptionLimit:
         # 1 行を意図的に長くしたタスクを 25 件 (パネル最大数) 作って 4096 文字超を狙う
         long_value = "x" * 500  # 1 行 ~520 文字 → 25 行で ~13000 文字
         tasks = [
-            Task(type=f"type_{i}", set_value=2, value=long_value, current=0)
+            make_task(
+                type=f"type_{i}",
+                set_value=2,
+                value=long_value,
+                current=0,
+                description_template="value (set, play)",
+            )
             for i in range(25)
         ]
         SessionManager.instance().start(_make_session(tasks))

@@ -30,6 +30,7 @@ from src.services.session_manager import SessionManager
 from src.services.song_repository import Song
 from src.services.task import Task
 from tests.cogs.conftest import make_mock_interaction
+from tests.conftest import make_task
 
 
 # ==================================================
@@ -72,7 +73,7 @@ def _make_session(
     return Session(
         song_name=song_name,
         panel_count=1 if tasks is None else len(tasks),
-        tasks=tasks if tasks is not None else [Task(type="level", set_value=1, value=5)],
+        tasks=tasks if tasks is not None else [make_task(type="level", set_value=1, value=5)],
         channel_id=2001,
         owner_id=1001,
         started_at=datetime(2026, 5, 7, tzinfo=timezone.utc),

@@ -30,6 +30,7 @@ from src.services.session_manager import SessionManager
 from src.services.song_repository import Song
 from src.services.task import Task
 from tests.cogs.conftest import make_mock_interaction
+from tests.conftest import make_task
 
 
 # ==================================================
@@ -70,7 +71,7 @@ def _sample_song(name: str = "SampleSong") -> Song:
 
 def _sample_task(type_: str = "level") -> Task:
     """テスト用の最小 Task を生成する"""
-    return Task(type=type_, set_value=1, value=5)
+    return make_task(type=type_, set_value=1, value=5)
 
 
 def _make_existing_session() -> Session:
@@ -378,6 +379,75 @@ class TestStartHappyPath:
         session = captured["session"]
         assert session is not None
         assert session.mosaic_block == 45
+
+    def test_initial_embed_uses_formatted_description(self):
+        """
+        お題一覧は `Task.format_description()` で value/set/play を実値に置換した
+        文章で並ぶ (生の `task.type` や `(set=N)` 表記を含まない)
+        """
+        # `description_template` 付きのタスク 4 件を直接注入する
+        # (Session.__post_init__ で panel_count == len(tasks) を要求するため、
+        #  panels=4 と件数を一致させる)
+        tasks = [
+            make_task(
+                type="notes_density_above",
+                set_value=3,
+                value=5.0,
+                play_quality="プレイ",
+                description_template=(
+                    "ノーツ密度がvalue[notes/s]以上の譜面を持つ楽曲をset回play"
+                ),
+            ),
+            make_task(
+                type="level_total",
+                set_value=40,
+                value=None,
+                play_quality="プレイ",
+                description_template="playした譜面のレベルの合計がset",
+            ),
+            make_task(
+                type="dummy_a",
+                set_value=1,
+                value=None,
+                description_template="ダミーAをset回プレイ",
+            ),
+            make_task(
+                type="dummy_b",
+                set_value=1,
+                value=None,
+                description_template="ダミーBをset回プレイ",
+            ),
+        ]
+        cog = _make_cog(tasks=tasks)
+        interaction = make_mock_interaction()
+        sent_message = _make_followup_message()
+        _attach_followup_message(interaction, sent_message)
+        choice = app_commands.Choice(name="4", value=4)
+
+        async def run() -> None:
+            await _invoke_start(cog, interaction, panels=choice)
+            SessionManager.instance().reset()
+
+        asyncio.run(run())
+
+        # followup.send の embed kwarg を取得
+        kwargs = interaction.followup.send.call_args.kwargs
+        embed = kwargs.get("embed")
+        import discord as _discord
+
+        assert isinstance(embed, _discord.Embed)
+        body: str = embed.description or ""
+        # placeholder が実値で置換された文章が含まれる
+        # (`play` は play_quality "プレイ" に置換されるため、テンプレート中の
+        #  "play" 部分も "プレイ" に変わる点に注意)
+        assert (
+            "ノーツ密度が5.0[notes/s]以上の譜面を持つ楽曲を3回プレイ" in body
+        )
+        assert "プレイした譜面のレベルの合計が40" in body
+        # 旧表記 (生 type / "(set=N)") は含まない
+        assert "notes_density_above" not in body
+        assert "level_total" not in body
+        assert "(set=" not in body
 
 
 # ==================================================

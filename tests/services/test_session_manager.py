@@ -18,7 +18,7 @@ import pytest
 
 from src.services.session import Session
 from src.services.session_manager import SessionManager
-from src.services.task import Task
+from tests.conftest import make_task
 
 
 # ==================================================
@@ -26,7 +26,7 @@ from src.services.task import Task
 # ==================================================
 def _make_session(song_name: str = "Aragami") -> Session:
     """テスト用の最小 Session を組み立てる"""
-    tasks = [Task(type="level", set_value=1, value=5)]
+    tasks = [make_task(type="level", set_value=1, value=5)]
     return Session(
         song_name=song_name,
         panel_count=1,

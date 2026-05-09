@@ -33,6 +33,7 @@ from src.services.song_repository import Song
 from src.services.task import Task
 from src.services.task_evaluator import TaskEvaluator
 from tests.cogs.conftest import make_mock_interaction
+from tests.conftest import make_task
 
 
 # ==================================================
@@ -158,7 +159,7 @@ class TestEarlyValidation:
         cog = _make_cog()
         # セッションを登録しておき、charming バリデーションが先に走ることを確認
         SessionManager.instance().start(
-            _make_session([Task(type="level", set_value=1, value=5)])
+            _make_session([make_task(type="level", set_value=1, value=5)])
         )
         interaction = make_mock_interaction()
 
@@ -181,7 +182,7 @@ class TestEarlyValidation:
     def test_invalid_combo_returns_ephemeral_error(self):
         cog = _make_cog()
         SessionManager.instance().start(
-            _make_session([Task(type="level", set_value=1, value=5)])
+            _make_session([make_task(type="level", set_value=1, value=5)])
         )
         interaction = make_mock_interaction()
 
@@ -216,7 +217,7 @@ class TestEarlyValidation:
         cog = _make_cog(songs=[_sample_song("KnownSong")])
         SessionManager.instance().start(
             _make_session(
-                [Task(type="level", set_value=1, value=5)],
+                [make_task(type="level", set_value=1, value=5)],
                 song_name="KnownSong",
             )
         )
@@ -247,7 +248,7 @@ class TestHappyPath:
     def test_play_record_added_to_session(self):
         cog = _make_cog()
         SessionManager.instance().start(
-            _make_session([Task(type="level", set_value=1, value=5)])
+            _make_session([make_task(type="level", set_value=1, value=5)])
         )
         interaction = make_mock_interaction()
         _attach_pinned_message(interaction)
@@ -276,7 +277,7 @@ class TestHappyPath:
     def test_defer_then_followup_embed_sent(self):
         cog = _make_cog()
         SessionManager.instance().start(
-            _make_session([Task(type="level", set_value=1, value=5)])
+            _make_session([make_task(type="level", set_value=1, value=5)])
         )
         interaction = make_mock_interaction()
         _attach_pinned_message(interaction)
@@ -296,7 +297,7 @@ class TestHappyPath:
         """マッチ系タスクは current が +1 され、newly_cleared なら set_value に到達する"""
         cog = _make_cog()
         # set_value=1 / value=5 の "level" タスク → SampleSong は Hard=5 なのでマッチ
-        task = Task(type="level", set_value=1, value=5)
+        task = make_task(type="level", set_value=1, value=5)
         SessionManager.instance().start(_make_session([task]))
         interaction = make_mock_interaction()
         _attach_pinned_message(interaction)
@@ -314,7 +315,7 @@ class TestHappyPath:
         """マッチしないタスクは current 据え置き / 進捗無しを embed に反映"""
         cog = _make_cog()
         # value=99 (どの難易度にも一致しない) の level タスク
-        task = Task(type="level", set_value=2, value=99)
+        task = make_task(type="level", set_value=2, value=99)
         SessionManager.instance().start(_make_session([task]))
         interaction = make_mock_interaction()
         _attach_pinned_message(interaction)
@@ -336,8 +337,20 @@ class TestHappyPath:
         """進捗があったタスクのみ embed の description に列挙される"""
         cog = _make_cog()
         # マッチするタスク (level=5) と マッチしないタスク (level=99)
-        match_task = Task(type="level", set_value=2, value=5)
-        no_match_task = Task(type="level", set_value=2, value=99)
+        match_task = make_task(
+            type="level",
+            set_value=2,
+            value=5,
+            description_template="Lv.valueの譜面を持つ楽曲をset回play",
+            play_quality="プレイ",
+        )
+        no_match_task = make_task(
+            type="level",
+            set_value=2,
+            value=99,
+            description_template="Lv.valueの譜面を持つ楽曲をset回play",
+            play_quality="プレイ",
+        )
         SessionManager.instance().start(
             _make_session([match_task, no_match_task])
         )
@@ -353,10 +366,10 @@ class TestHappyPath:
         embed: discord.Embed = kwargs["embed"]
         description = embed.description or ""
 
-        # 1 行目のタスク (level=5) は進捗あり
-        assert "1. level (5): 1/2" in description
+        # 1 行目のタスク (level=5) は進捗あり: 進捗 prefix + 整形済み description
+        assert "1. (1/2) Lv.5の譜面を持つ楽曲を2回プレイ" in description
         # 2 行目のタスク (level=99) は進捗なし → 列挙されない
-        assert "level (99)" not in description
+        assert "Lv.99" not in description
 
 
 # ==================================================
@@ -369,7 +382,7 @@ class TestPanelImageRefresh:
         """新規 cleared が起きたら ImageProcessor.compose と message.edit が呼ばれる"""
         cog = _make_cog()
         # set_value=1 → 一発で cleared に到達
-        task = Task(type="level", set_value=1, value=5)
+        task = make_task(type="level", set_value=1, value=5)
         SessionManager.instance().start(_make_session([task]))
         interaction = make_mock_interaction()
         pinned = _attach_pinned_message(interaction)
@@ -396,7 +409,7 @@ class TestPanelImageRefresh:
         """進捗のみ (cleared に到達せず) では画像再合成も編集も走らない"""
         cog = _make_cog()
         # set_value=3 → 1 回プレイでは cleared にならない
-        task = Task(type="level", set_value=3, value=5)
+        task = make_task(type="level", set_value=3, value=5)
         SessionManager.instance().start(_make_session([task]))
         interaction = make_mock_interaction()
         pinned = _attach_pinned_message(interaction)
@@ -418,7 +431,7 @@ class TestPanelImageRefresh:
     def test_image_not_recomposed_when_no_progress(self):
         """進捗 0 のプレイでは画像再合成も編集も走らない"""
         cog = _make_cog()
-        task = Task(type="level", set_value=2, value=99)  # マッチしない
+        task = make_task(type="level", set_value=2, value=99)  # マッチしない
         SessionManager.instance().start(_make_session([task]))
         interaction = make_mock_interaction()
         _attach_pinned_message(interaction)
@@ -435,7 +448,7 @@ class TestPanelImageRefresh:
     def test_compose_failure_logged_but_response_continues(self):
         """画像合成失敗時も embed の followup は送られる (握りつぶさず警告)"""
         cog = _make_cog()
-        task = Task(type="level", set_value=1, value=5)
+        task = make_task(type="level", set_value=1, value=5)
         SessionManager.instance().start(_make_session([task]))
         interaction = make_mock_interaction()
         _attach_pinned_message(interaction)
@@ -459,7 +472,7 @@ class TestPanelImageRefresh:
     def test_message_edit_failure_logged_but_response_continues(self):
         """`message.edit` が DiscordException で失敗しても embed の followup は送られる"""
         cog = _make_cog()
-        task = Task(type="level", set_value=1, value=5)
+        task = make_task(type="level", set_value=1, value=5)
         SessionManager.instance().start(_make_session([task]))
         interaction = make_mock_interaction()
         pinned = _attach_pinned_message(interaction)

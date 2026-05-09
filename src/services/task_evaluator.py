@@ -90,6 +90,11 @@ class TaskEvaluator:
         マッチ系は「条件成立で +1、不成立で据え置き」、
         累積系は ``all_plays`` から再計算した値を返します。
 
+        本評価器は ``task.play_quality`` (AC/FC/プレイ) によるフィルタも担います:
+        最新 ``play_record`` がタスクの play_quality を満たさなければ早期に
+        ``task.current`` を返し、累積系では ``all_plays`` 側も同条件で絞り込んで
+        集計します。
+
         Args:
             task: 対象タスク
             play_record: 直近に追加された 1 件のプレイ記録
@@ -105,6 +110,10 @@ class TaskEvaluator:
         fn = self._evaluators.get(task.type)
         if fn is None:
             raise ValueError(f"未対応のお題タイプです: {task.type}")
+        # play_quality を満たさないプレイは current を変動させない
+        # (累積系は内部で all_plays を再フィルタして集計するため別途整合性を確保)
+        if not self._satisfies_quality(task, play_record, song_repo):
+            return task.current
         return fn(task, play_record, all_plays, song_repo)
 
     def supported_types(self) -> frozenset[str]:
@@ -120,6 +129,38 @@ class TaskEvaluator:
     def _matched(task: Task, matched: bool) -> int:
         """マッチ判定結果から新 current を算出する小ヘルパー"""
         return task.current + 1 if matched else task.current
+
+    @classmethod
+    def _satisfies_quality(
+        cls,
+        task: Task,
+        play_record: PlayRecord,
+        song_repo: SongRepository,
+    ) -> bool:
+        """
+        ``task.play_quality`` の条件を ``play_record`` が満たすかを判定する
+
+        - "プレイ": 常に True (品質フィルタなし)
+        - "AC": リザルトの charming 数が当該譜面の NOTES 数と一致
+        - "FC": リザルトの combo 数が当該譜面の NOTES 数と一致
+
+        Raises:
+            ValueError: 楽曲または難易度のメタ情報が SongRepository に無い場合、
+                および未知の play_quality 指定があった場合
+        """
+        if task.play_quality == "プレイ":
+            return True
+        # AC / FC 判定には当該譜面の NOTES 数 (= all_songs.json の NOTES) が必要
+        song = cls._required_song(song_repo, play_record.song_name)
+        notes = cls._required_notes(song, play_record.difficulty)
+        if task.play_quality == "AC":
+            return play_record.charming == notes
+        if task.play_quality == "FC":
+            return play_record.combo == notes
+        # Task.__post_init__ で弾いている想定だが、防衛的に明示エラーにする
+        raise ValueError(
+            f"未対応の play_quality です: {task.play_quality!r}"
+        )
 
     @staticmethod
     def _required_song(song_repo: SongRepository, name: str) -> Song:
@@ -242,12 +283,16 @@ class TaskEvaluator:
     # --------------------------------------------------
     # 累積系 (all_plays を毎回再計算)
     # --------------------------------------------------
+    # 累積系では「play_quality を満たすプレイのみ集計対象」とするため、
+    # all_plays を `_satisfies_quality` で絞り込んでから集計する。
     def _eval_level_total(
         self, task: Task, play_record: PlayRecord, all_plays, song_repo
     ) -> int:
-        """全プレイの (プレイした難易度の) レベル合計"""
+        """全プレイの (プレイした難易度の) レベル合計 (quality フィルタ後)"""
         total = 0
         for pr in all_plays:
+            if not self._satisfies_quality(task, pr, song_repo):
+                continue
             song = self._required_song(song_repo, pr.song_name)
             total += self._required_level(song, pr.difficulty)
         return total
@@ -255,14 +300,22 @@ class TaskEvaluator:
     def _eval_result_charming_total(
         self, task: Task, play_record: PlayRecord, all_plays, song_repo
     ) -> int:
-        """全プレイの charming 合計"""
-        return sum(pr.charming for pr in all_plays)
+        """全プレイの charming 合計 (quality フィルタ後)"""
+        return sum(
+            pr.charming
+            for pr in all_plays
+            if self._satisfies_quality(task, pr, song_repo)
+        )
 
     def _eval_result_combo_total(
         self, task: Task, play_record: PlayRecord, all_plays, song_repo
     ) -> int:
-        """全プレイの combo 合計"""
-        return sum(pr.combo for pr in all_plays)
+        """全プレイの combo 合計 (quality フィルタ後)"""
+        return sum(
+            pr.combo
+            for pr in all_plays
+            if self._satisfies_quality(task, pr, song_repo)
+        )
 
     # --------------------------------------------------
     # notes_*

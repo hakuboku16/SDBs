@@ -16,8 +16,8 @@ import pytest
 
 from src.services.session import PlayRecord
 from src.services.song_repository import SongRepository
-from src.services.task import Task
 from src.services.task_evaluator import TaskEvaluator
+from tests.conftest import make_task
 
 
 # ==================================================
@@ -131,7 +131,7 @@ class TestTaskEvaluatorRegistry:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """未登録の type は ValueError を送出する"""
-        task = Task(type="not_a_real_type", set_value=1, value=None)
+        task = make_task(type="not_a_real_type", set_value=1, value=None)
         with pytest.raises(ValueError, match="未対応"):
             evaluator.evaluate(task, _play(), [_play()], fake_repo)
 
@@ -142,7 +142,7 @@ class TestTaskEvaluatorRegistry:
         SongRepository に存在しない楽曲を参照する type で ValueError
         (level は楽曲メタを引くため、リポジトリ未登録曲で必ず失敗する)
         """
-        task = Task(type="level", set_value=1, value=5)
+        task = make_task(type="level", set_value=1, value=5)
         play = _play(song_name="UnknownSong")
         with pytest.raises(ValueError, match="存在しません"):
             evaluator.evaluate(task, play, [play], fake_repo)
@@ -159,7 +159,7 @@ class TestTitleEvaluators:
     ):
         """value の全文字が大文字小文字を無視してタイトルに含まれるとマッチ"""
         # "Miracle of Daybreak" は a/b/c を全て含む (case-insensitive)
-        task = Task(type="title_include", set_value=2, value=["a", "b", "c"])
+        task = make_task(type="title_include", set_value=2, value=["a", "b", "c"])
         play = _play(song_name="Miracle of Daybreak")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -168,7 +168,7 @@ class TestTitleEvaluators:
     ):
         """1 文字でも欠ければ current 据え置き"""
         # "Aya" は b を含まない
-        task = Task(type="title_include", set_value=2, value=["a", "b"])
+        task = make_task(type="title_include", set_value=2, value=["a", "b"])
         play = _play(song_name="Aya")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
 
@@ -176,7 +176,7 @@ class TestTitleEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """既存 current から +1 で返る (絶対値ではなくインクリメント)"""
-        task = Task(
+        task = make_task(
             type="title_include", set_value=5, value=["a"], current=2
         )
         play = _play(song_name="Aya")
@@ -186,7 +186,7 @@ class TestTitleEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """タイトル先頭が候補のいずれかで始まればマッチ"""
-        task = Task(type="title_startswith", set_value=2, value=["a", "z"])
+        task = make_task(type="title_startswith", set_value=2, value=["a", "z"])
         play = _play(song_name="Aya")  # casefold で "aya"
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -194,7 +194,7 @@ class TestTitleEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """先頭がいずれの候補にも該当しなければ据え置き"""
-        task = Task(type="title_startswith", set_value=2, value=["x", "z"])
+        task = make_task(type="title_startswith", set_value=2, value=["x", "z"])
         play = _play(song_name="Aya")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
 
@@ -202,7 +202,7 @@ class TestTitleEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """タイトル末尾が候補のいずれかで終わればマッチ"""
-        task = Task(type="title_endswith", set_value=1, value=["a", "z"])
+        task = make_task(type="title_endswith", set_value=1, value=["a", "z"])
         play = _play(song_name="Aya")  # 末尾 "a"
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -210,7 +210,7 @@ class TestTitleEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """末尾がいずれの候補とも一致しなければ据え置き"""
-        task = Task(type="title_endswith", set_value=1, value=["x", "z"])
+        task = make_task(type="title_endswith", set_value=1, value=["x", "z"])
         play = _play(song_name="Aya")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
 
@@ -218,13 +218,13 @@ class TestTitleEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """value 文字以下 (含む) でマッチ"""
-        task = Task(type="title_len_below", set_value=2, value=3)
+        task = make_task(type="title_len_below", set_value=2, value=3)
         assert (
             evaluator.evaluate(task, _play(song_name="Aya"), [_play()], fake_repo)
             == 1
         )
         # 4 文字はマッチしない
-        task2 = Task(type="title_len_below", set_value=2, value=3)
+        task2 = make_task(type="title_len_below", set_value=2, value=3)
         assert (
             evaluator.evaluate(
                 task2, _play(song_name="Dream"), [_play()], fake_repo
@@ -236,7 +236,7 @@ class TestTitleEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """value 文字以上 (含む) でマッチ"""
-        task = Task(type="title_len_above", set_value=2, value=20)
+        task = make_task(type="title_len_above", set_value=2, value=20)
         # "Reverse-Parallel-Universe" は 25 文字
         play = _play(song_name="Reverse-Parallel-Universe")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
@@ -245,13 +245,13 @@ class TestTitleEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """半角スペース数がちょうど value 個でマッチ"""
-        task = Task(type="title_blank", set_value=1, value=2)
+        task = make_task(type="title_blank", set_value=1, value=2)
         # "Miracle of Daybreak" は半角スペース 2 個
         play = _play(song_name="Miracle of Daybreak")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
         # 0 個でも、value=0 ならマッチ
-        task0 = Task(type="title_blank", set_value=1, value=0)
+        task0 = make_task(type="title_blank", set_value=1, value=0)
         play0 = _play(song_name="Aya")
         assert evaluator.evaluate(task0, play0, [play0], fake_repo) == 1
 
@@ -259,7 +259,7 @@ class TestTitleEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """空白数が一致しなければ据え置き"""
-        task = Task(type="title_blank", set_value=1, value=5)
+        task = make_task(type="title_blank", set_value=1, value=5)
         play = _play(song_name="Miracle of Daybreak")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
 
@@ -274,7 +274,7 @@ class TestDifficultAndLevel:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """プレイ難易度が候補に含まれればマッチ"""
-        task = Task(type="difficult", set_value=3, value=["Easy", "Normal"])
+        task = make_task(type="difficult", set_value=3, value=["Easy", "Normal"])
         play = _play(difficulty="Normal")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -282,7 +282,7 @@ class TestDifficultAndLevel:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """プレイ難易度が候補外なら据え置き"""
-        task = Task(type="difficult", set_value=3, value=["Easy"])
+        task = make_task(type="difficult", set_value=3, value=["Easy"])
         play = _play(difficulty="Hard")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
 
@@ -291,7 +291,7 @@ class TestDifficultAndLevel:
     ):
         """楽曲が該当レベルの譜面を 1 つでも持てばマッチ (任意難易度のプレイで OK)"""
         # "Aya" は Hard=12 を持つ。プレイ難易度は Easy でもマッチする
-        task = Task(type="level", set_value=3, value=12)
+        task = make_task(type="level", set_value=3, value=12)
         play = _play(song_name="Aya", difficulty="Easy")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -300,7 +300,7 @@ class TestDifficultAndLevel:
     ):
         """楽曲が該当レベルの譜面を 1 つも持たなければ据え置き"""
         # "Aya" は Lv.5/8/12。Lv.7 は持たない
-        task = Task(type="level", set_value=3, value=7)
+        task = make_task(type="level", set_value=3, value=7)
         play = _play(song_name="Aya")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
 
@@ -319,7 +319,7 @@ class TestCumulativeEvaluators:
             _play(song_name="Aya", difficulty="Hard"),
             _play(song_name="Dream", difficulty="Normal"),
         ]
-        task = Task(type="level_total", set_value=30, value=None)
+        task = make_task(type="level_total", set_value=30, value=None)
         assert evaluator.evaluate(task, plays[-1], plays, fake_repo) == 16
 
     def test_level_total_recomputes_from_all_plays(
@@ -328,7 +328,7 @@ class TestCumulativeEvaluators:
         """current の値に依存せず、毎回 all_plays から再計算する"""
         plays = [_play(song_name="Aya", difficulty="Easy")]  # 5
         # current が大きくても、all_plays が 5 のままなら 5 を返す
-        task = Task(type="level_total", set_value=30, value=None, current=20)
+        task = make_task(type="level_total", set_value=30, value=None, current=20)
         # ※ Task は current >= set_value で cleared を True に揃えるが、
         #   evaluate 自体は task.current に依存しないことを示すテスト
         # task.current=20 でも累積系は再計算するので 5
@@ -338,7 +338,7 @@ class TestCumulativeEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """all_plays が空なら 0 (実用上は来ないが境界として)"""
-        task = Task(type="level_total", set_value=30, value=None)
+        task = make_task(type="level_total", set_value=30, value=None)
         # play_record は形式上必要だが評価には用いられない (任意の値で良い)
         assert evaluator.evaluate(task, _play(), [], fake_repo) == 0
 
@@ -351,7 +351,7 @@ class TestCumulativeEvaluators:
             _play(charming=500),
             _play(charming=200),
         ]
-        task = Task(type="result_charming_total", set_value=3000, value=None)
+        task = make_task(type="result_charming_total", set_value=3000, value=None)
         assert evaluator.evaluate(task, plays[-1], plays, fake_repo) == 1000
 
     def test_result_combo_total(
@@ -359,7 +359,7 @@ class TestCumulativeEvaluators:
     ):
         """combo の合計"""
         plays = [_play(combo=400), _play(combo=600)]
-        task = Task(type="result_combo_total", set_value=3000, value=None)
+        task = make_task(type="result_combo_total", set_value=3000, value=None)
         assert evaluator.evaluate(task, plays[-1], plays, fake_repo) == 1000
 
 
@@ -374,7 +374,7 @@ class TestNotesEvaluators:
     ):
         """楽曲がノーツ数 value 以下の譜面を 1 つでも持てばマッチ"""
         # Dream は Easy=78 (≤ 100)
-        task = Task(type="notes_below", set_value=2, value=100)
+        task = make_task(type="notes_below", set_value=2, value=100)
         play = _play(song_name="Dream", difficulty="Hard")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -383,7 +383,7 @@ class TestNotesEvaluators:
     ):
         """全譜面が value より大きければ据え置き"""
         # Aya の最少ノーツは Easy=100
-        task = Task(type="notes_below", set_value=2, value=50)
+        task = make_task(type="notes_below", set_value=2, value=50)
         play = _play(song_name="Aya")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
 
@@ -392,7 +392,7 @@ class TestNotesEvaluators:
     ):
         """楽曲がノーツ数 value 以上の譜面を 1 つでも持てばマッチ"""
         # Aya は Hard=1200
-        task = Task(type="notes_above", set_value=1, value=1100)
+        task = make_task(type="notes_above", set_value=1, value=1100)
         play = _play(song_name="Aya")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -401,7 +401,7 @@ class TestNotesEvaluators:
     ):
         """ノーツ密度が value [notes/s] 以下の譜面を持てばマッチ"""
         # Aya: time=120, Easy=100 → 0.833...
-        task = Task(type="notes_density_below", set_value=1, value=1.0)
+        task = make_task(type="notes_density_below", set_value=1, value=1.0)
         play = _play(song_name="Aya")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -410,7 +410,7 @@ class TestNotesEvaluators:
     ):
         """ノーツ密度が value [notes/s] 以上の譜面を持てばマッチ"""
         # Reverse-Parallel-Universe: time=100, Hard=1600 → 16.0
-        task = Task(type="notes_density_above", set_value=1, value=10.0)
+        task = make_task(type="notes_density_above", set_value=1, value=10.0)
         play = _play(song_name="Reverse-Parallel-Universe")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -419,7 +419,7 @@ class TestNotesEvaluators:
     ):
         """全譜面が密度未満なら据え置き"""
         # Aya: time=120, max Hard=1200 → 10.0 (== 10.0 はマッチするので 11 で検証)
-        task = Task(type="notes_density_above", set_value=1, value=11.0)
+        task = make_task(type="notes_density_above", set_value=1, value=11.0)
         play = _play(song_name="Aya")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
 
@@ -431,19 +431,19 @@ class TestNotesEvaluators:
         (Aya: Easy=100, Normal=500, Hard=1200。Easy=末尾0 のみ)
         """
         # value=["0"]: Easy なら notes=100 → 末尾 0 でマッチ
-        task = Task(type="notes_endswith", set_value=1, value=["0"])
+        task = make_task(type="notes_endswith", set_value=1, value=["0"])
         play_easy = _play(song_name="Aya", difficulty="Easy")
         assert evaluator.evaluate(task, play_easy, [play_easy], fake_repo) == 1
 
         # 同じ value=["0"] でも Normal は notes=500 → 末尾 0 でマッチ
         play_normal = _play(song_name="Aya", difficulty="Normal")
-        task2 = Task(type="notes_endswith", set_value=1, value=["0"])
+        task2 = make_task(type="notes_endswith", set_value=1, value=["0"])
         assert (
             evaluator.evaluate(task2, play_normal, [play_normal], fake_repo) == 1
         )
 
         # Hard は notes=1200 → 末尾 0 → マッチ。一方 value=["5"] では不一致
-        task3 = Task(type="notes_endswith", set_value=1, value=["5"])
+        task3 = make_task(type="notes_endswith", set_value=1, value=["5"])
         play_hard = _play(song_name="Aya", difficulty="Hard")
         assert (
             evaluator.evaluate(task3, play_hard, [play_hard], fake_repo) == 0
@@ -453,7 +453,7 @@ class TestNotesEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """value が 1 要素でなければ ValueError"""
-        task = Task(type="notes_endswith", set_value=1, value=["0", "1"])
+        task = make_task(type="notes_endswith", set_value=1, value=["0", "1"])
         play = _play(song_name="Aya", difficulty="Easy")
         with pytest.raises(ValueError, match="1 要素"):
             evaluator.evaluate(task, play, [play], fake_repo)
@@ -470,7 +470,7 @@ class TestComposerAndFeaturing:
     ):
         """楽曲のいずれかのコンポーザー名が候補のいずれかで始まればマッチ"""
         # Miracle of Daybreak: composer=["Mili", "Cassi"]
-        task = Task(type="composer_name_startswith", set_value=2, value=["c", "z"])
+        task = make_task(type="composer_name_startswith", set_value=2, value=["c", "z"])
         play = _play(song_name="Miracle of Daybreak")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -479,7 +479,7 @@ class TestComposerAndFeaturing:
     ):
         """全コンポーザーが先頭文字に該当しなければ据え置き"""
         # Aya: composer=["Aoi"]
-        task = Task(type="composer_name_startswith", set_value=2, value=["b", "c"])
+        task = make_task(type="composer_name_startswith", set_value=2, value=["b", "c"])
         play = _play(song_name="Aya")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
 
@@ -488,7 +488,7 @@ class TestComposerAndFeaturing:
     ):
         """楽曲のいずれかのコンポーザーが候補のいずれかで終わればマッチ"""
         # Miracle of Daybreak: composer=["Mili", "Cassi"] → Mili は "i" で終わる
-        task = Task(type="composer_name_endswith", set_value=1, value=["i"])
+        task = make_task(type="composer_name_endswith", set_value=1, value=["i"])
         play = _play(song_name="Miracle of Daybreak")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -496,7 +496,7 @@ class TestComposerAndFeaturing:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """コンポーザーが 2 名以上ならマッチ"""
-        task = Task(type="composer_members", set_value=1, value=None)
+        task = make_task(type="composer_members", set_value=1, value=None)
         play = _play(song_name="Miracle of Daybreak")  # 2 名
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -504,7 +504,7 @@ class TestComposerAndFeaturing:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """単独コンポーザーは据え置き"""
-        task = Task(type="composer_members", set_value=1, value=None)
+        task = make_task(type="composer_members", set_value=1, value=None)
         play = _play(song_name="Aya")  # 1 名
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
 
@@ -512,7 +512,7 @@ class TestComposerAndFeaturing:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """feat. が 1 件以上あればマッチ"""
-        task = Task(type="featuring", set_value=1, value=None)
+        task = make_task(type="featuring", set_value=1, value=None)
         play = _play(song_name="Miracle of Daybreak")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -520,7 +520,7 @@ class TestComposerAndFeaturing:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """feat. が空なら据え置き"""
-        task = Task(type="featuring", set_value=1, value=None)
+        task = make_task(type="featuring", set_value=1, value=None)
         play = _play(song_name="Aya")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
 
@@ -536,7 +536,7 @@ class TestTimeEvaluators:
     ):
         """演奏時間が value 以下 (含む) でマッチ"""
         # Reverse-Parallel-Universe: time=100
-        task = Task(type="time_below", set_value=2, value=100)
+        task = make_task(type="time_below", set_value=2, value=100)
         play = _play(song_name="Reverse-Parallel-Universe")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -545,7 +545,7 @@ class TestTimeEvaluators:
     ):
         """演奏時間が value より大きいなら据え置き"""
         # Miracle of Daybreak: time=200
-        task = Task(type="time_below", set_value=2, value=100)
+        task = make_task(type="time_below", set_value=2, value=100)
         play = _play(song_name="Miracle of Daybreak")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
 
@@ -554,7 +554,7 @@ class TestTimeEvaluators:
     ):
         """演奏時間が value 以上 (含む) でマッチ"""
         # Miracle of Daybreak: time=200
-        task = Task(type="time_above", set_value=2, value=200)
+        task = make_task(type="time_above", set_value=2, value=200)
         play = _play(song_name="Miracle of Daybreak")
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -569,7 +569,7 @@ class TestSongMetaEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """楽曲のバージョンが value (リスト) に含まれればマッチ"""
-        task = Task(type="version", set_value=1, value=["1.0", "2.0"])
+        task = make_task(type="version", set_value=1, value=["1.0", "2.0"])
         play = _play(song_name="Aya")  # version "1.0"
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -577,7 +577,7 @@ class TestSongMetaEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """対象外バージョンは据え置き"""
-        task = Task(type="version", set_value=1, value=["3.0"])
+        task = make_task(type="version", set_value=1, value=["3.0"])
         play = _play(song_name="Aya")  # version "1.0"
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
 
@@ -585,7 +585,7 @@ class TestSongMetaEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """book が value (リスト) に含まれればマッチ"""
-        task = Task(type="book", set_value=2, value=["Vol.1", "Vol.2"])
+        task = make_task(type="book", set_value=2, value=["Vol.1", "Vol.2"])
         play = _play(song_name="Aya")  # book="Vol.1"
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -593,7 +593,7 @@ class TestSongMetaEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """対象外 book は据え置き"""
-        task = Task(type="book", set_value=2, value=["BookX"])
+        task = make_task(type="book", set_value=2, value=["BookX"])
         play = _play(song_name="Aya")  # book="Vol.1"
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
 
@@ -601,7 +601,7 @@ class TestSongMetaEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """shelf が value (リスト) に含まれればマッチ"""
-        task = Task(type="shelf", set_value=3, value=["Story"])
+        task = make_task(type="shelf", set_value=3, value=["Story"])
         play = _play(song_name="Aya")  # shelf="Story"
         assert evaluator.evaluate(task, play, [play], fake_repo) == 1
 
@@ -609,9 +609,133 @@ class TestSongMetaEvaluators:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """対象外 shelf は据え置き"""
-        task = Task(type="shelf", set_value=3, value=["Collection"])
+        task = make_task(type="shelf", set_value=3, value=["Collection"])
         play = _play(song_name="Aya")  # shelf="Story"
         assert evaluator.evaluate(task, play, [play], fake_repo) == 0
+
+
+# ==================================================
+# play_quality フィルタ (AC / FC / プレイ)
+# ==================================================
+class TestPlayQualityFilter:
+    """
+    `Task.play_quality` によるプレイカウント絞り込みの挙動
+
+    - "AC": charming 数 == 当該譜面の NOTES 数のプレイのみ加算対象
+    - "FC": combo 数 == 当該譜面の NOTES 数のプレイのみ加算対象
+    - "プレイ": フィルタ無し (従来挙動)
+    """
+
+    def test_ac_match_when_charming_equals_notes(
+        self, evaluator: TaskEvaluator, fake_repo: SongRepository
+    ):
+        """AC タスク: charming==NOTES なら加算"""
+        # Aya/Easy の NOTES = 100。charming=100 でフィルタ通過
+        task = make_task(
+            type="title_endswith",
+            set_value=2,
+            value=["a"],
+            play_quality="AC",
+        )
+        play = _play(song_name="Aya", difficulty="Easy", charming=100, combo=50)
+        assert evaluator.evaluate(task, play, [play], fake_repo) == 1
+
+    def test_ac_no_match_when_charming_differs(
+        self, evaluator: TaskEvaluator, fake_repo: SongRepository
+    ):
+        """AC タスク: charming!=NOTES なら据え置き"""
+        task = make_task(
+            type="title_endswith",
+            set_value=2,
+            value=["a"],
+            play_quality="AC",
+        )
+        play = _play(song_name="Aya", difficulty="Easy", charming=99, combo=100)
+        assert evaluator.evaluate(task, play, [play], fake_repo) == 0
+
+    def test_fc_match_when_combo_equals_notes(
+        self, evaluator: TaskEvaluator, fake_repo: SongRepository
+    ):
+        """FC タスク: combo==NOTES なら加算"""
+        task = make_task(
+            type="title_endswith",
+            set_value=2,
+            value=["a"],
+            play_quality="FC",
+        )
+        play = _play(song_name="Aya", difficulty="Easy", charming=50, combo=100)
+        assert evaluator.evaluate(task, play, [play], fake_repo) == 1
+
+    def test_fc_no_match_when_combo_differs(
+        self, evaluator: TaskEvaluator, fake_repo: SongRepository
+    ):
+        """FC タスク: combo!=NOTES なら据え置き"""
+        task = make_task(
+            type="title_endswith",
+            set_value=2,
+            value=["a"],
+            play_quality="FC",
+        )
+        play = _play(song_name="Aya", difficulty="Easy", charming=100, combo=99)
+        assert evaluator.evaluate(task, play, [play], fake_repo) == 0
+
+    def test_play_quality_default_does_not_filter(
+        self, evaluator: TaskEvaluator, fake_repo: SongRepository
+    ):
+        """プレイ タスク: charming/combo に関わらず加算 (従来挙動)"""
+        task = make_task(
+            type="title_endswith",
+            set_value=2,
+            value=["a"],
+            play_quality="プレイ",
+        )
+        play = _play(song_name="Aya", difficulty="Easy", charming=1, combo=1)
+        assert evaluator.evaluate(task, play, [play], fake_repo) == 1
+
+    def test_cumulative_filters_all_plays_by_quality(
+        self, evaluator: TaskEvaluator, fake_repo: SongRepository
+    ):
+        """
+        累積系: AC タスクなら AC 条件を満たすプレイの charming のみ合計
+
+        - Aya/Easy NOTES=100。charming=100 → AC 通過
+        - Aya/Easy NOTES=100。charming=80  → AC 不通過 (合計から除外)
+        - Aya/Hard NOTES=1200。charming=1200 → AC 通過
+        """
+        plays = [
+            _play(song_name="Aya", difficulty="Easy", charming=100),
+            _play(song_name="Aya", difficulty="Easy", charming=80),
+            _play(song_name="Aya", difficulty="Hard", charming=1200),
+        ]
+        task = make_task(
+            type="result_charming_total",
+            set_value=3000,
+            value=None,
+            play_quality="AC",
+        )
+        # 100 + 1200 = 1300 (charming=80 は AC を満たさず除外)
+        assert evaluator.evaluate(task, plays[-1], plays, fake_repo) == 1300
+
+    def test_cumulative_excludes_latest_when_quality_unmet(
+        self, evaluator: TaskEvaluator, fake_repo: SongRepository
+    ):
+        """
+        累積系: 最新プレイが AC を満たさない場合は早期 task.current 返し
+        (累積系は all_plays フィルタも整合させる二重保護を確認)
+        """
+        plays = [
+            _play(song_name="Aya", difficulty="Easy", charming=100),
+            _play(song_name="Aya", difficulty="Easy", charming=50),  # 最新は AC 不成立
+        ]
+        task = make_task(
+            type="result_charming_total",
+            set_value=3000,
+            value=None,
+            play_quality="AC",
+            current=100,  # 過去の AC 通過分が既に反映済み
+        )
+        # 早期 return で task.current のまま (再計算しない)
+        assert evaluator.evaluate(task, plays[-1], plays, fake_repo) == 100
 
 
 # ==================================================
@@ -624,7 +748,7 @@ class TestEvaluateAndApplyProgress:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """マッチ系: 連続マッチで current が積み上がり、set_value 到達でクリア"""
-        task = Task(type="title_endswith", set_value=2, value=["a"])
+        task = make_task(type="title_endswith", set_value=2, value=["a"])
         plays: list[PlayRecord] = []
 
         # 1 回目
@@ -645,7 +769,7 @@ class TestEvaluateAndApplyProgress:
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
         """累積系: 累計が set_value を超えたタイミングでクリア"""
-        task = Task(type="result_charming_total", set_value=3000, value=None)
+        task = make_task(type="result_charming_total", set_value=3000, value=None)
         plays = [_play(charming=1500)]
         new_current = evaluator.evaluate(task, plays[-1], plays, fake_repo)
         assert task.set_progress(new_current) is False

@@ -11,6 +11,7 @@ import pytest
 
 from src.services.session import AnswerRecord, PlayRecord, Session
 from src.services.task import Task
+from tests.conftest import make_task
 
 
 # ==================================================
@@ -18,7 +19,7 @@ from src.services.task import Task
 # ==================================================
 def _make_task(set_value: int = 1, *, current: int = 0) -> Task:
     """検証ロジックに干渉しないシンプルな Task を作成する"""
-    return Task(type="level", set_value=set_value, value=5, current=current)
+    return make_task(type="level", set_value=set_value, value=5, current=current)
 
 
 def _make_session(
