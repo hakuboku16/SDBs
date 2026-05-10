@@ -27,6 +27,7 @@ from discord.ext import commands
 from src.cogs._helpers import (
     EMBED_COLOR_INFO,
     build_error_embed,
+    build_topic_field,
     build_warning_embed,
 )
 from src.core.config import (
@@ -310,9 +311,11 @@ class StartSessionCog(commands.Cog):
         """
         セッション開始時にチャンネルへ投稿する embed を組み立てる
 
-        進捗表示は `/progress` で詳細化するため、ここではタスク種別と必要回数のみ並べます。
-        embed は画像を `set_image` で添付するため、本文 (description) には設定値とお題列を
-        まとめて格納します。
+        embed は画像を `set_image` で添付するため、設定値 (パネル数 / モザイク / 回転 /
+        グレースケール) を description にまとめ、お題は 1 件 1 field で並べます。
+        各 field の name / value 整形は `build_topic_field` に集約しています。
+
+        footer には制限時間 (config 由来) と /play / /answer の使用方法を表示します。
 
         Args:
             session: 開始するセッション
@@ -321,27 +324,28 @@ class StartSessionCog(commands.Cog):
         Returns:
             タスク一覧と設定値を含む `discord.Embed` (色は info)
         """
-        description_lines: list[str] = [
-            f"- パネル数: {session.panel_count}",
-            f"- モザイク: {mosaic_label} (block={session.mosaic_block}px)",
-            (
-                f"- 回転: {'有効' if session.rotate else '無効'}"
-                f" / グレースケール: {'有効' if session.grayscale else '無効'}"
-            ),
-            "",
-            "**お題**",
-        ]
-        for index, task in enumerate(session.tasks, start=1):
-            # `Task.format_description` で value/set/play placeholder を実値に置換した
-            # ユーザー向け文章 (例: 「ノーツ密度が5.0[notes/s]以上の譜面を持つ楽曲を3回プレイ」)
-            description_lines.append(
-                f"{index}. {task.format_description()}"
-            )
-        return discord.Embed(
-            title="セッション開始",
-            description="\n".join(description_lines),
+        description: str = (
+            f"- パネル数: {session.panel_count}\n"
+            f"- モザイク: {mosaic_label} (block={session.mosaic_block}px)\n"
+            f"- 回転: {'有効' if session.rotate else '無効'}"
+            f" / グレースケール: {'有効' if session.grayscale else '無効'}"
+        )
+        embed = discord.Embed(
+            title="🎯 セッション開始",
+            description=description,
             color=EMBED_COLOR_INFO,
         )
+        for index, task in enumerate(session.tasks):
+            name, value = build_topic_field(index, task)
+            embed.add_field(name=name, value=value, inline=False)
+        timeout_minutes: int = self._discord_config.session_timeout_minutes
+        embed.set_footer(
+            text=(
+                f"制限時間: {timeout_minutes}分 | "
+                "/play でプレイ情報を送信 | /answer で回答"
+            )
+        )
+        return embed
 
     async def _notify_warning(self, channel: discord.abc.Messageable) -> None:
         """

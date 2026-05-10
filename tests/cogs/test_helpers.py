@@ -15,9 +15,15 @@ from unittest.mock import MagicMock
 import pytest
 from discord import app_commands
 
-from src.cogs._helpers import build_song_autocomplete
+from src.cogs._helpers import (
+    TOPIC_CLEARED_SYMBOL,
+    TOPIC_NOT_CLEARED_SYMBOL,
+    build_song_autocomplete,
+    build_topic_field,
+)
 from src.services.song_repository import Song, SongRepository
 from src.utils.helpers import get_absolute_path
+from tests.conftest import make_task
 from tests.cogs.conftest import make_mock_interaction
 
 
@@ -121,6 +127,60 @@ class TestBuildSongAutocomplete:
         # 万一マッチしなくてもこのテストの主眼は上限超過しないことなので問題ない
         choices = _run(autocomplete(interaction, "a"))
         assert len(choices) <= SongRepository.AUTOCOMPLETE_LIMIT
+
+
+# ==================================================
+# build_topic_field
+# ==================================================
+class TestBuildTopicField:
+    """`build_topic_field` の振る舞い (`/start` `/play` `/progress` 共通フォーマット)"""
+
+    def test_uncleared_task_uses_unclear_symbol(self):
+        """未 cleared のタスクは ⬜ で始まる name と format_description の value を返す"""
+        task = make_task(
+            type="level",
+            set_value=3,
+            value=5,
+            current=1,
+            play_quality="プレイ",
+            description_template="Lv.valueの譜面を持つ楽曲をset回play",
+        )
+        name, value = build_topic_field(0, task)
+        # symbol + 0-origin index + (current/set)
+        assert name == f"{TOPIC_NOT_CLEARED_SYMBOL} パネル 0 (1/3)"
+        # value は format_description (placeholder 置換済)
+        assert value == "Lv.5の譜面を持つ楽曲を3回プレイ"
+
+    def test_cleared_task_uses_cleared_symbol(self):
+        """cleared 済みのタスクは ✅ で始まる name を返す"""
+        task = make_task(
+            type="level",
+            set_value=1,
+            value=5,
+            current=1,
+            play_quality="プレイ",
+            description_template="Lv.valueの譜面を持つ楽曲をset回play",
+        )
+        name, _ = build_topic_field(2, task)
+        # 既に cleared で初期化されている
+        assert task.cleared is True
+        assert name == f"{TOPIC_CLEARED_SYMBOL} パネル 2 (1/1)"
+
+    def test_field_value_truncated_when_too_long(self):
+        """value が 1024 文字を超えるテンプレートは末尾を省略マーカーで切り詰める"""
+        long_template = "x" * 2000  # 1024 を大幅に超える
+        task = make_task(
+            type="dummy",
+            set_value=1,
+            value=None,
+            current=0,
+            description_template=long_template,
+        )
+        _, value = build_topic_field(0, task)
+        # Discord の field value 上限 (1024) に収まる
+        assert len(value) <= 1024
+        # 切り詰め時は末尾に省略記号が付く
+        assert value.endswith("…")
 
 
 # ==================================================

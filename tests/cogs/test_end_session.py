@@ -127,10 +127,14 @@ class TestEndHappyPath:
 
         asyncio.run(run())
 
-        # defer (ephemeral) されている
+        # defer (チャンネル公開) されている (参考スタイル準拠で完了 embed を公開する)
         interaction.response.defer.assert_awaited_once()
         defer_kwargs = interaction.response.defer.call_args.kwargs
-        assert defer_kwargs.get("ephemeral") is True
+        # ephemeral 指定なし (= 公開)
+        assert (
+            defer_kwargs.get("ephemeral") is None
+            or defer_kwargs.get("ephemeral") is False
+        )
 
         # finalizer.finalize が呼ばれた
         finalize_mock = cast(Any, cog._session_finalizer).finalize
@@ -145,14 +149,21 @@ class TestEndHappyPath:
         # summary は "セッション終了"
         assert kwargs["summary"] == "セッション終了"
 
-        # 完了応答が ephemeral でユーザーへ届く (embed 形式)
+        # 完了応答がチャンネル公開でユーザーへ届く (緑 embed 形式)
         interaction.followup.send.assert_awaited_once()
         followup_kwargs = interaction.followup.send.call_args.kwargs
-        assert followup_kwargs.get("ephemeral") is True
+        # ephemeral 指定なし (= 公開)
+        assert (
+            followup_kwargs.get("ephemeral") is None
+            or followup_kwargs.get("ephemeral") is False
+        )
         # embed として送られ、楽曲名が description に含まれる
         embed = followup_kwargs.get("embed")
         import discord as _discord
         assert isinstance(embed, _discord.Embed)
+        # タイトルに絵文字 + "セッション終了"
+        assert embed.title is not None and "✅" in embed.title
+        assert "セッション終了" in embed.title
         assert embed.description is not None
         assert "Magnolia" in embed.description
 

@@ -383,7 +383,7 @@ class TestStartHappyPath:
     def test_initial_embed_uses_formatted_description(self):
         """
         お題一覧は `Task.format_description()` で value/set/play を実値に置換した
-        文章で並ぶ (生の `task.type` や `(set=N)` 表記を含まない)
+        文章を value に持つ field として 1 件 1 field で並ぶ
         """
         # `description_template` 付きのタスク 4 件を直接注入する
         # (Session.__post_init__ で panel_count == len(tasks) を要求するため、
@@ -436,18 +436,37 @@ class TestStartHappyPath:
         import discord as _discord
 
         assert isinstance(embed, _discord.Embed)
+        # タイトルに絵文字が付与されている (参考スタイル準拠)
+        assert embed.title is not None and "🎯" in embed.title
+        # description には設定値 (パネル数 / モザイク / 回転 / グレースケール) が含まれる
         body: str = embed.description or ""
-        # placeholder が実値で置換された文章が含まれる
-        # (`play` は play_quality "プレイ" に置換されるため、テンプレート中の
-        #  "play" 部分も "プレイ" に変わる点に注意)
+        assert "パネル数: 4" in body
+
+        # 各お題は 1 件 1 field で並ぶ
+        assert len(embed.fields) == 4
+        # field name には "⬜ パネル {0-origin index} (current/set)" 形式
+        assert embed.fields[0].name is not None
+        assert embed.fields[0].name.startswith("⬜ パネル 0 (0/3)")
+        assert embed.fields[1].name is not None
+        assert embed.fields[1].name.startswith("⬜ パネル 1 (0/40)")
+        # field value には format_description の結果が入る (placeholder 置換済)
         assert (
-            "ノーツ密度が5.0[notes/s]以上の譜面を持つ楽曲を3回プレイ" in body
+            embed.fields[0].value
+            == "ノーツ密度が5.0[notes/s]以上の譜面を持つ楽曲を3回プレイ"
         )
-        assert "プレイした譜面のレベルの合計が40" in body
-        # 旧表記 (生 type / "(set=N)") は含まない
-        assert "notes_density_above" not in body
-        assert "level_total" not in body
-        assert "(set=" not in body
+        assert embed.fields[1].value == "プレイした譜面のレベルの合計が40"
+        # 旧表記 (生 type) は含まない
+        all_field_text: str = "\n".join(
+            f"{f.name}\n{f.value}" for f in embed.fields
+        )
+        assert "notes_density_above" not in all_field_text
+        assert "level_total" not in all_field_text
+
+        # footer に制限時間 (config 既定 30 分) と使用方法ヒントが入る
+        assert embed.footer.text is not None
+        assert "30分" in embed.footer.text
+        assert "/play" in embed.footer.text
+        assert "/answer" in embed.footer.text
 
 
 # ==================================================

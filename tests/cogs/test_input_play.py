@@ -334,7 +334,7 @@ class TestHappyPath:
         assert "進捗のあったタスクはありません" in embed.description
 
     def test_embed_lists_progressed_tasks(self):
-        """進捗があったタスクのみ embed の description に列挙される"""
+        """進捗があったタスクのみ embed の field に列挙される"""
         cog = _make_cog()
         # マッチするタスク (level=5) と マッチしないタスク (level=99)
         match_task = make_task(
@@ -364,12 +364,46 @@ class TestHappyPath:
 
         _, kwargs = interaction.followup.send.call_args
         embed: discord.Embed = kwargs["embed"]
-        description = embed.description or ""
 
-        # 1 行目のタスク (level=5) は進捗あり: 進捗 prefix + 整形済み description
-        assert "1. (1/2) Lv.5の譜面を持つ楽曲を2回プレイ" in description
-        # 2 行目のタスク (level=99) は進捗なし → 列挙されない
-        assert "Lv.99" not in description
+        # 進捗があったタスクのみ field に列挙される (1 件 1 field)
+        assert len(embed.fields) == 1
+        # 0-origin の index 0 のタスク (level=5) は進捗あり
+        assert embed.fields[0].name is not None
+        assert embed.fields[0].name.startswith("⬜ パネル 0 (1/2)")
+        assert embed.fields[0].value == "Lv.5の譜面を持つ楽曲を2回プレイ"
+        # マッチしないタスクの description は含まれない
+        all_field_text: str = "\n".join(
+            f"{f.name}\n{f.value}" for f in embed.fields
+        )
+        assert "Lv.99" not in all_field_text
+
+    def test_newly_cleared_task_shows_clear_marker(self):
+        """新規 cleared に到達したタスクは field name 末尾に [クリア!] が付く"""
+        cog = _make_cog()
+        # set_value=1 / value=5 → 一発で cleared
+        task = make_task(
+            type="level",
+            set_value=1,
+            value=5,
+            description_template="Lv.valueの譜面を持つ楽曲をset回play",
+            play_quality="プレイ",
+        )
+        SessionManager.instance().start(_make_session([task]))
+        interaction = make_mock_interaction()
+        _attach_pinned_message(interaction)
+
+        async def run() -> None:
+            await _invoke_play(cog, interaction)
+
+        asyncio.run(run())
+
+        _, kwargs = interaction.followup.send.call_args
+        embed: discord.Embed = kwargs["embed"]
+        assert len(embed.fields) == 1
+        # cleared 済みのため symbol は ✅、末尾に "[クリア!]" マーカー
+        assert embed.fields[0].name is not None
+        assert embed.fields[0].name.startswith("✅ パネル 0 (1/1)")
+        assert embed.fields[0].name.endswith("[クリア!]")
 
 
 # ==================================================

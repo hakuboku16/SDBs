@@ -30,6 +30,7 @@ from src.cogs._helpers import (
     SongAutocomplete,
     build_error_embed,
     build_song_autocomplete,
+    build_topic_field,
 )
 from src.core.config import get_assets_config
 from src.services.image_processor import ImageProcessor
@@ -61,8 +62,8 @@ _PANEL_IMAGE_FILENAME: str = "panels.png"
 # /play 応答 embed の色 (進捗を緑系で示す)
 _EMBED_COLOR: discord.Color = discord.Color.green()
 
-# embed.description の上限 (Discord 仕様 4096)。長大なお題列で溢れる事故を避ける
-_DESCRIPTION_LIMIT: int = 4000
+# 進捗のあったタスクが無い場合に description として表示する文言
+_NO_PROGRESS_DESCRIPTION: str = "進捗のあったタスクはありません。"
 
 
 # ==================================================
@@ -336,9 +337,9 @@ class InputPlayCog(commands.Cog):
         進捗のあったタスクを列挙する embed を組み立てる
 
         - 進捗のないプレイは ``description`` に「進捗のあったタスクはありません。」
-        - 進捗があった場合は 1 行 1 タスクで以下フォーマット:
-          ``"{index}. ({current}/{set_value}) {description (placeholder 置換済)}{[クリア!]}"``
-          ``description`` は ``Task.format_description`` により value/set/play を実値に置換。
+        - 進捗があった場合は 1 タスク 1 field でパネル番号 / 進捗 / お題内容を表示する。
+          field の整形は `build_topic_field` に集約 (`/start` `/progress` と同形式)。
+          新規 cleared に到達したタスクは field name 末尾に ``[クリア!]`` を付与する。
 
         Args:
             record: 入力された `PlayRecord` (タイトル表示に利用)
@@ -348,29 +349,22 @@ class InputPlayCog(commands.Cog):
             進捗まとめ embed
         """
         title: str = (
-            f"プレイ記録を追加: {record.song_name} ({record.difficulty})"
+            f"▶ プレイ記録を追加: {record.song_name} ({record.difficulty})"
         )
-
-        if not progressed:
-            description: str = "進捗のあったタスクはありません。"
-        else:
-            lines: list[str] = []
-            for index, task, newly_cleared in progressed:
-                marker: str = " [クリア!]" if newly_cleared else ""
-                # `(進捗/目標値)` を description の前に付与
-                lines.append(
-                    f"{index + 1}. ({task.current}/{task.set_value}) "
-                    f"{task.format_description()}{marker}"
-                )
-            description = "\n".join(lines)
-            if len(description) > _DESCRIPTION_LIMIT:
-                description = description[: _DESCRIPTION_LIMIT - 1] + "…"
-
-        return discord.Embed(
+        description: Optional[str] = (
+            _NO_PROGRESS_DESCRIPTION if not progressed else None
+        )
+        embed = discord.Embed(
             title=title,
             description=description,
             color=_EMBED_COLOR,
         )
+        for index, task, newly_cleared in progressed:
+            name, value = build_topic_field(index, task)
+            if newly_cleared:
+                name = f"{name} [クリア!]"
+            embed.add_field(name=name, value=value, inline=False)
+        return embed
 
 
 # ==================================================

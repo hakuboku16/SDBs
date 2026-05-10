@@ -95,8 +95,9 @@ class EndSessionCog(commands.Cog):
             )
             return
 
-        # 画像合成 + 結果通知に時間がかかり得るため defer
-        await interaction.response.defer(ephemeral=True)
+        # 画像合成 + 結果通知に時間がかかり得るためチャンネル公開で defer
+        # (完了 embed は緑色でチャンネルへ公開し、参考スタイルに合わせる)
+        await interaction.response.defer()
 
         # SessionFinalizer.finalize はチャンネルに `discord.abc.Messageable` 互換を要求するため
         # InteractionChannel (Union) のうち送受信可能な実装が来る前提で渡す
@@ -109,9 +110,10 @@ class EndSessionCog(commands.Cog):
 
         await interaction.followup.send(
             embed=build_success_embed(
-                f"セッションを終了しました (楽曲: {session.song_name})。"
+                f"セッションを終了しました (楽曲: {session.song_name})。\n"
+                "結果は指定のチャンネルに送信されました。",
+                title="✅ セッション終了",
             ),
-            ephemeral=True,
         )
 
 

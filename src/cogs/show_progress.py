@@ -18,7 +18,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from src.cogs._helpers import build_error_embed
+from src.cogs._helpers import build_error_embed, build_topic_field
 from src.services.session import Session
 from src.services.session_manager import SessionManager
 
@@ -26,15 +26,8 @@ from src.services.session_manager import SessionManager
 logger = logging.getLogger(__name__)
 
 # ==================================================
-# 視覚化記号
+# embed フォーマット定数
 # ==================================================
-# クリア済み / 未クリアを示す表示用シンボル。フォント依存しない Unicode 記号を採用
-_CLEARED_SYMBOL: str = "✓"
-_NOT_CLEARED_SYMBOL: str = "□"
-
-# Discord embed.description の上限 (4096 文字)。改行込みでこの長さに収める
-_DESCRIPTION_LIMIT: int = 4000
-
 # embed タイトル / 色 (`/progress` 専用)
 _EMBED_COLOR: discord.Color = discord.Color.blue()
 
@@ -98,10 +91,12 @@ class ShowProgressCog(commands.Cog):
         """
         セッションのタスク進捗を embed として組み立てる
 
-        各タスクは
-        ``"{symbol} {index}. ({current}/{set_value}) {description (placeholder 置換済)}"``
-        形式で 1 行ずつ description に列挙します。``description`` は
-        ``Task.format_description`` により value/set/play を実値に置換します。
+        達成数はタイトルに集約 (``📊 現在の進捗 (X/Y クリア)``) し、
+        各タスクは 1 件 1 field で並べます (パネル番号 / 進捗 / お題内容)。
+        field の整形は `build_topic_field` に集約 (`/start` `/play` と同形式)。
+
+        Discord の 25 fields 上限はパネル数最大 25 とちょうど一致するため、
+        25 パネル時は本タイトルが追加 field を持たない設計でぴったり収まります。
 
         Args:
             session: 進捗を表示するセッション
@@ -112,26 +107,14 @@ class ShowProgressCog(commands.Cog):
         cleared_count: int = sum(1 for task in session.tasks if task.cleared)
         total_count: int = len(session.tasks)
 
-        # 1 タスク 1 行で description に並べる
-        lines: list[str] = []
-        for index, task in enumerate(session.tasks, start=1):
-            symbol = _CLEARED_SYMBOL if task.cleared else _NOT_CLEARED_SYMBOL
-            # `(進捗/目標値)` を description の前に付与
-            lines.append(
-                f"{symbol} {index}. ({task.current}/{task.set_value}) "
-                f"{task.format_description()}"
-            )
-
-        body: str = "\n".join(lines)
-        # description 上限を超える場合は末尾を省略 (パネル数 25 + 長い value で稀に到達)
-        if len(body) > _DESCRIPTION_LIMIT:
-            body = body[: _DESCRIPTION_LIMIT - 1] + "…"
-
-        return discord.Embed(
-            title=f"現在の進捗 ({cleared_count}/{total_count} クリア)",
-            description=body,
+        embed = discord.Embed(
+            title=f"📊 現在の進捗 ({cleared_count}/{total_count} クリア)",
             color=_EMBED_COLOR,
         )
+        for index, task in enumerate(session.tasks):
+            name, value = build_topic_field(index, task)
+            embed.add_field(name=name, value=value, inline=False)
+        return embed
 
 
 # ==================================================

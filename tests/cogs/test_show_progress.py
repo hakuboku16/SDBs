@@ -152,26 +152,28 @@ class TestProgressHappyPath:
         embed = kwargs.get("embed")
         assert isinstance(embed, discord.Embed)
 
-        # タイトルにクリア数が反映される
+        # タイトルにクリア数 + 絵文字が反映される
         assert embed.title is not None
+        assert "📊" in embed.title
         assert "1/3" in embed.title
 
-        # description に各タスクが 1 行ずつ含まれる
-        description = embed.description or ""
-        # cleared タスク: ✓ + (1/1) + 整形済み description
-        assert (
-            "✓ 1. (1/1) Lv.5の譜面を持つ楽曲を1回プレイ" in description
-        )
+        # 各タスクは 1 件 1 field で並ぶ (0-origin の index)
+        assert len(embed.fields) == 3
+        # cleared タスク: ✅ + 0-origin index 0 + (1/1) + 整形済み description
+        assert embed.fields[0].name == "✅ パネル 0 (1/1)"
+        assert embed.fields[0].value == "Lv.5の譜面を持つ楽曲を1回プレイ"
         # 未 cleared タスク (value list, AC quality)
+        assert embed.fields[1].name == "⬜ パネル 1 (1/3)"
         assert (
-            "□ 2. (1/3) 楽曲名に(a, b)のすべてが含まれる楽曲を3回AC"
-            in description
+            embed.fields[1].value
+            == "楽曲名に(a, b)のすべてが含まれる楽曲を3回AC"
         )
         # 未 cleared タスク (value None / 累積系)
-        assert "□ 3. (20/100) プレイした譜面のレベルの合計が100" in description
+        assert embed.fields[2].name == "⬜ パネル 2 (20/100)"
+        assert embed.fields[2].value == "プレイした譜面のレベルの合計が100"
 
     def test_all_cleared_tasks_use_cleared_symbol(self):
-        """全タスク cleared なら全行が ✓ で始まり、タイトルが N/N となる"""
+        """全タスク cleared なら全 field name が ✅ で始まり、タイトルが N/N となる"""
         cog = _make_cog()
         tasks = [
             make_task(type="level", set_value=1, value=5, current=1),
@@ -187,16 +189,17 @@ class TestProgressHappyPath:
 
         _, kwargs = interaction.response.send_message.call_args
         embed = kwargs["embed"]
-        description = embed.description or ""
 
-        # 全行 cleared 記号
-        assert description.count("✓ ") == 2
-        assert "□ " not in description
+        # 全 field cleared 記号
+        assert len(embed.fields) == 2
+        assert all(
+            f.name is not None and f.name.startswith("✅ ") for f in embed.fields
+        )
         # タイトルに 2/2 が含まれる
         assert "2/2" in (embed.title or "")
 
     def test_no_cleared_tasks_use_unclear_symbol_only(self):
-        """未 cleared のみなら全行が □ で始まり、タイトルが 0/N となる"""
+        """未 cleared のみなら全 field name が ⬜ で始まり、タイトルが 0/N となる"""
         cog = _make_cog()
         tasks = [
             make_task(type="level", set_value=3, value=5, current=0),
@@ -212,28 +215,28 @@ class TestProgressHappyPath:
 
         _, kwargs = interaction.response.send_message.call_args
         embed = kwargs["embed"]
-        description = embed.description or ""
 
-        assert description.count("□ ") == 2
-        assert "✓ " not in description
+        assert len(embed.fields) == 2
+        assert all(
+            f.name is not None and f.name.startswith("⬜ ") for f in embed.fields
+        )
         assert "0/2" in (embed.title or "")
 
 
 # ==================================================
 # 上限ガード
 # ==================================================
-class TestProgressDescriptionLimit:
-    """description は Discord 仕様 (4096 文字) を超えてはならない"""
+class TestProgressFieldLimit:
+    """パネル最大数 (25) でも Discord の field 数上限 (25) を超えない"""
 
-    def test_description_truncated_when_too_long(self):
+    def test_25_panels_fit_within_field_limit(self):
+        """25 パネルは 25 fields にちょうど収まる (上限超過なし)"""
         cog = _make_cog()
-        # 1 行を意図的に長くしたタスクを 25 件 (パネル最大数) 作って 4096 文字超を狙う
-        long_value = "x" * 500  # 1 行 ~520 文字 → 25 行で ~13000 文字
         tasks = [
             make_task(
                 type=f"type_{i}",
                 set_value=2,
-                value=long_value,
+                value=f"v{i}",
                 current=0,
                 description_template="value (set, play)",
             )
@@ -249,12 +252,8 @@ class TestProgressDescriptionLimit:
 
         _, kwargs = interaction.response.send_message.call_args
         embed = kwargs["embed"]
-        description = embed.description or ""
-
-        # description は上限 (4096) を超えない
-        assert len(description) <= 4096
-        # 切り詰めが発生したら末尾に省略記号 "…" が付く
-        assert description.endswith("…")
+        # Discord 仕様の field 数上限 (25) を超えない
+        assert len(embed.fields) == 25
 
 
 # ==================================================

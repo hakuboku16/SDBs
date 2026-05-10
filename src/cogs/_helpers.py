@@ -36,6 +36,7 @@ import discord
 from discord import app_commands
 
 from src.services.song_repository import SongRepository
+from src.services.task import Task
 
 
 # `app_commands.autocomplete` に渡すコールバックの型エイリアス。
@@ -174,6 +175,59 @@ def build_error_embed(
         title=title,
         description=_truncate_description(description),
         color=EMBED_COLOR_ERROR,
+    )
+
+
+# ==================================================
+# お題 1 件 → embed field 用の name / value タプル
+# ==================================================
+# クリア済み / 未クリアを示す表示用シンボル (`/start` `/play` `/progress` で共通)
+TOPIC_CLEARED_SYMBOL: str = "✅"
+TOPIC_NOT_CLEARED_SYMBOL: str = "⬜"
+
+# Discord embed field の文字数制限 (公式仕様: name 256 / value 1024)
+_FIELD_NAME_LIMIT: int = 256
+_FIELD_VALUE_LIMIT: int = 1024
+
+
+def _truncate_for_field(text: str, limit: int) -> str:
+    """
+    embed field 文字数制限に収まるよう末尾を切り詰める
+
+    field の name / value は description と異なり「先頭を残す方が情報量が多い」
+    ため (お題タイトルや description テンプレート冒頭が重要)、末尾側を切り詰める。
+    """
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
+
+
+def build_topic_field(index: int, task: Task) -> tuple[str, str]:
+    """
+    お題 1 件を embed の add_field 用 ``(name, value)`` に整形する
+
+    ``name``  : ``"{symbol} パネル {index} ({current}/{set_value})"``
+        - ``symbol`` は ``task.cleared`` で ``✅`` / ``⬜`` を切り替え
+        - ``index`` は 0-origin (パネル画像の cleared_indices と表記を揃える)
+    ``value`` : ``task.format_description()`` (value/set/play placeholder 置換済)
+
+    `/start` `/play` `/progress` のすべてで同じ表示を使うため、フォーマット変更時は
+    本関数 1 箇所の修正で全 cog に伝播する。
+
+    Args:
+        index: 0-origin のパネル番号
+        task: 表示対象の `Task`
+
+    Returns:
+        ``(field_name, field_value)`` のタプル。両者とも Discord 仕様 (name 256 /
+        value 1024) に収まるよう切り詰め済み。
+    """
+    symbol: str = TOPIC_CLEARED_SYMBOL if task.cleared else TOPIC_NOT_CLEARED_SYMBOL
+    name: str = f"{symbol} パネル {index} ({task.current}/{task.set_value})"
+    value: str = task.format_description()
+    return (
+        _truncate_for_field(name, _FIELD_NAME_LIMIT),
+        _truncate_for_field(value, _FIELD_VALUE_LIMIT),
     )
 
 
