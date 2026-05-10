@@ -238,6 +238,151 @@ class TestEarlyValidation:
         assert session is not None
         assert session.play_records == []
 
+    def test_unknown_difficulty_returns_ephemeral_warning(self):
+        """楽曲に存在しない難易度は ephemeral warning で拒否される"""
+        # Easy のみを持つ楽曲 (Hard は存在しない)
+        easy_only_song = Song(
+            name="EasyOnlySong",
+            shelf="A",
+            book="B",
+            version="v1",
+            time=120,
+            composer=["C"],
+            levels={"Easy": 1},
+            notes={"Easy": 50},
+        )
+        cog = _make_cog(songs=[easy_only_song])
+        SessionManager.instance().start(
+            _make_session(
+                [make_task(type="level", set_value=1, value=5)],
+                song_name="EasyOnlySong",
+            )
+        )
+        interaction = make_mock_interaction()
+
+        async def run() -> None:
+            await _invoke_play(
+                cog,
+                interaction,
+                song="EasyOnlySong",
+                difficulty=app_commands.Choice(name="Hard", value="Hard"),
+                charming=10,
+                combo=10,
+            )
+
+        asyncio.run(run())
+
+        interaction.response.send_message.assert_awaited_once()
+        _, kwargs = interaction.response.send_message.call_args
+        assert kwargs.get("ephemeral") is True
+        # warning embed (orange)
+        embed: discord.Embed = kwargs["embed"]
+        assert embed.color == discord.Color.orange()
+        assert embed.description is not None
+        assert "Hard" in embed.description
+        # defer / followup は呼ばれず PlayRecord は追加されない
+        interaction.response.defer.assert_not_called()
+        interaction.followup.send.assert_not_called()
+        session = SessionManager.instance().current()
+        assert session is not None
+        assert session.play_records == []
+
+    def test_charming_exceeds_notes_returns_ephemeral_warning(self):
+        """charming がノーツ数を超える場合は ephemeral warning で拒否される"""
+        # SampleSong の Hard は notes=200
+        cog = _make_cog()
+        SessionManager.instance().start(
+            _make_session([make_task(type="level", set_value=1, value=5)])
+        )
+        interaction = make_mock_interaction()
+
+        async def run() -> None:
+            await _invoke_play(
+                cog,
+                interaction,
+                song="SampleSong",
+                difficulty=app_commands.Choice(name="Hard", value="Hard"),
+                charming=201,  # ノーツ数 200 を 1 超過
+                combo=100,
+            )
+
+        asyncio.run(run())
+
+        interaction.response.send_message.assert_awaited_once()
+        _, kwargs = interaction.response.send_message.call_args
+        assert kwargs.get("ephemeral") is True
+        embed: discord.Embed = kwargs["embed"]
+        assert embed.color == discord.Color.orange()
+        assert embed.description is not None
+        assert "charming" in embed.description
+        assert "200" in embed.description
+        interaction.response.defer.assert_not_called()
+        interaction.followup.send.assert_not_called()
+        session = SessionManager.instance().current()
+        assert session is not None
+        assert session.play_records == []
+
+    def test_combo_exceeds_notes_returns_ephemeral_warning(self):
+        """combo がノーツ数を超える場合は ephemeral warning で拒否される"""
+        cog = _make_cog()
+        SessionManager.instance().start(
+            _make_session([make_task(type="level", set_value=1, value=5)])
+        )
+        interaction = make_mock_interaction()
+
+        async def run() -> None:
+            await _invoke_play(
+                cog,
+                interaction,
+                song="SampleSong",
+                difficulty=app_commands.Choice(name="Hard", value="Hard"),
+                charming=100,
+                combo=201,  # ノーツ数 200 を 1 超過
+            )
+
+        asyncio.run(run())
+
+        interaction.response.send_message.assert_awaited_once()
+        _, kwargs = interaction.response.send_message.call_args
+        assert kwargs.get("ephemeral") is True
+        embed: discord.Embed = kwargs["embed"]
+        assert embed.color == discord.Color.orange()
+        assert embed.description is not None
+        assert "combo" in embed.description
+        assert "200" in embed.description
+        interaction.response.defer.assert_not_called()
+        interaction.followup.send.assert_not_called()
+        session = SessionManager.instance().current()
+        assert session is not None
+        assert session.play_records == []
+
+    def test_charming_equal_to_notes_passes(self):
+        """charming / combo がノーツ数と一致 (フルコンボ) する場合は通過する"""
+        cog = _make_cog()
+        SessionManager.instance().start(
+            _make_session([make_task(type="level", set_value=1, value=5)])
+        )
+        interaction = make_mock_interaction()
+        _attach_pinned_message(interaction)
+
+        async def run() -> None:
+            await _invoke_play(
+                cog,
+                interaction,
+                song="SampleSong",
+                difficulty=app_commands.Choice(name="Hard", value="Hard"),
+                charming=200,  # ノーツ数 200 と一致 → 許容
+                combo=200,
+            )
+
+        asyncio.run(run())
+
+        # defer されて PlayRecord が登録される
+        interaction.response.defer.assert_awaited_once()
+        session = SessionManager.instance().current()
+        assert session is not None
+        assert len(session.play_records) == 1
+
 
 # ==================================================
 # Happy Path
@@ -259,8 +404,8 @@ class TestHappyPath:
                 interaction,
                 song="SampleSong",
                 difficulty=app_commands.Choice(name="Hard", value="Hard"),
-                charming=300,
-                combo=400,
+                charming=150,
+                combo=180,
             )
 
         asyncio.run(run())
@@ -271,8 +416,8 @@ class TestHappyPath:
         rec: PlayRecord = session.play_records[0]
         assert rec.song_name == "SampleSong"
         assert rec.difficulty == "Hard"
-        assert rec.charming == 300
-        assert rec.combo == 400
+        assert rec.charming == 150
+        assert rec.combo == 180
 
     def test_defer_then_followup_embed_sent(self):
         cog = _make_cog()

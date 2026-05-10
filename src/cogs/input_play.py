@@ -31,6 +31,7 @@ from src.cogs._helpers import (
     build_error_embed,
     build_song_autocomplete,
     build_topic_field,
+    build_warning_embed,
 )
 from src.core.config import get_assets_config
 from src.services.image_processor import ImageProcessor
@@ -164,10 +165,43 @@ class InputPlayCog(commands.Cog):
             return
 
         # ----- 3) 楽曲存在チェック (autocomplete を経由しない手入力に備える) -----
-        if self._song_repository.find_by_name(song) is None:
+        song_meta = self._song_repository.find_by_name(song)
+        if song_meta is None:
             await interaction.response.send_message(
                 embed=build_error_embed(
                     f"指定された楽曲が見つかりません: {song}"
+                ),
+                ephemeral=True,
+            )
+            return
+
+        # ----- 3.5) 難易度・charming / combo 上限チェック -----
+        # 楽曲メタの notes 辞書から難易度キーを引き、ノーツ数を上限として
+        # charming / combo を検証する。逸脱時は ephemeral の warning で応答し、
+        # PlayRecord 追加・タスク評価は行わない。
+        notes_count: Optional[int] = song_meta.notes.get(difficulty.value)
+        if notes_count is None:
+            await interaction.response.send_message(
+                embed=build_warning_embed(
+                    f"楽曲 '{song}' には難易度 {difficulty.value} の譜面がありません。"
+                ),
+                ephemeral=True,
+            )
+            return
+        if charming > notes_count:
+            await interaction.response.send_message(
+                embed=build_warning_embed(
+                    f"charming ({charming}) が楽曲 '{song}' の {difficulty.value} 譜面の"
+                    f"ノーツ数 ({notes_count}) を超えています。"
+                ),
+                ephemeral=True,
+            )
+            return
+        if combo > notes_count:
+            await interaction.response.send_message(
+                embed=build_warning_embed(
+                    f"combo ({combo}) が楽曲 '{song}' の {difficulty.value} 譜面の"
+                    f"ノーツ数 ({notes_count}) を超えています。"
                 ),
                 ephemeral=True,
             )
