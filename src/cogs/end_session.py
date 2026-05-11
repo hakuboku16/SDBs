@@ -110,8 +110,8 @@ class EndSessionCog(commands.Cog):
 
         await interaction.followup.send(
             embed=build_success_embed(
-                f"セッションを終了しました (楽曲: {session.song_name})。\n"
-                "結果は指定のチャンネルに送信されました。",
+                "セッションが終了しました！\n"
+                "結果は別チャンネルに送信されます。",
                 title="✅ セッション終了",
             ),
         )

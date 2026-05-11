@@ -5,8 +5,10 @@ src/cogs/answer_song.py のユニットテスト
 
 * 進行中セッションが無い場合は ephemeral でエラー応答
 * `SongRepository` に存在しない楽曲名は ephemeral でエラー応答
-* 正解時: ephemeral で「○ 正解です」を返し、`Session.correct_answerers` に登録される
-* 不正解時: ephemeral で「× 不正解です」を返し、`Session.correct_answerers` には登録されない
+* 正解時: ephemeral で「🎉 正解です！」title と「正解: {song}」description を返し、
+  `Session.correct_answerers` に登録される
+* 不正解時: ephemeral で「❌ 不正解です」title と「あなたの回答: {song}」description を返し、
+  `Session.correct_answerers` には登録されない
 * 同一ユーザーの正解は重複登録されない (冪等性)
 * 正解/不正解にかかわらずセッションは終了しない (`/answer` 仕様)
 * 全回答は `Session.answer_records` に時系列で蓄積される (`/end` の集計用)
@@ -166,7 +168,7 @@ class TestAnswerJudgement:
     """正解判定と ephemeral 応答内容を検証する"""
 
     def test_correct_answer_returns_ephemeral_success_message(self):
-        """正解時: ○ メッセージが embed として本人にのみ ephemeral で返る"""
+        """正解時: 🎉 title と祝福 description が embed として本人にのみ ephemeral で返る"""
         cog = _make_cog(songs=[_sample_song("SampleSong")])
         SessionManager.instance().start(_make_session(song_name="SampleSong"))
         interaction = make_mock_interaction(
@@ -180,17 +182,20 @@ class TestAnswerJudgement:
 
         interaction.response.send_message.assert_awaited_once()
         _, kwargs = interaction.response.send_message.call_args
-        # Bot からの送信は embed 統一。embed.description に ○ / "正解" が含まれる
+        # Bot からの送信は embed 統一。title に「正解」、description に曲名と祝福文言。
         import discord as _discord
         embed = kwargs.get("embed")
         assert isinstance(embed, _discord.Embed)
-        message: str = embed.description or ""
-        assert "○" in message
-        assert "正解" in message
+        title: str = embed.title or ""
+        description: str = embed.description or ""
+        assert "🎉" in title
+        assert "正解" in title
+        assert "SampleSong" in description
+        assert "おめでとう" in description
         assert kwargs.get("ephemeral") is True
 
     def test_incorrect_answer_returns_ephemeral_failure_message(self):
-        """不正解時: × メッセージが embed として本人にのみ ephemeral で返る"""
+        """不正解時: ❌ title と再挑戦 description が embed として本人にのみ ephemeral で返る"""
         cog = _make_cog(
             songs=[_sample_song("SampleSong"), _sample_song("WrongSong")]
         )
@@ -207,9 +212,12 @@ class TestAnswerJudgement:
         import discord as _discord
         embed = kwargs.get("embed")
         assert isinstance(embed, _discord.Embed)
-        message: str = embed.description or ""
-        assert "×" in message
-        assert "不正解" in message
+        title: str = embed.title or ""
+        description: str = embed.description or ""
+        assert "❌" in title
+        assert "不正解" in title
+        assert "WrongSong" in description
+        assert "残念" in description
         assert kwargs.get("ephemeral") is True
 
 

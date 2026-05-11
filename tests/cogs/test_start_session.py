@@ -477,8 +477,8 @@ class TestFinalizeSession:
 
     def test_finalize_invokes_notifier_and_unpin_and_end(self):
         """
-        finalize は (1) 結果通知、(2) ピン解除、(3) SessionManager.end の順に実行する。
-        実処理は `SessionFinalizer.finalize` 経由で行われる。
+        finalize は (1) 制限時間終了通知、(2) 結果通知、(3) ピン解除、(4) SessionManager.end の順に実行する。
+        実処理 (2)-(4) は `SessionFinalizer.finalize` 経由で行われる。
         """
         cog = _make_cog()
         # 既存セッションを SessionManager に登録 (タイマー無し)
@@ -490,6 +490,7 @@ class TestFinalizeSession:
         pinned_msg = MagicMock()
         pinned_msg.unpin = AsyncMock()
         channel = MagicMock()
+        channel.send = AsyncMock()
         channel.fetch_message = AsyncMock(return_value=pinned_msg)
 
         async def run() -> None:
@@ -497,29 +498,38 @@ class TestFinalizeSession:
 
         asyncio.run(run())
 
-        # 1) 結果通知が呼ばれた (時間切れの summary 付き)
+        # 1) 制限時間終了 embed がセッションチャンネルへ送信された
+        channel.send.assert_awaited_once()
+        import discord as _discord
+        sent_embed = channel.send.call_args.kwargs.get("embed")
+        assert isinstance(sent_embed, _discord.Embed)
+        assert sent_embed.title is not None and "制限時間終了" in sent_embed.title
+        # 2) 結果通知が呼ばれた (時間切れの summary 付き)
         _bot_mock(cog).notifier.notify_session_result.assert_awaited_once()
         kwargs = _bot_mock(cog).notifier.notify_session_result.await_args.kwargs
         assert kwargs["summary"] == "セッション終了 (時間切れ)"
         assert kwargs["masked_song_name"] == "*" * len(session.song_name)
-        # 2) ピン解除が呼ばれた
+        # 3) ピン解除が呼ばれた
         channel.fetch_message.assert_awaited_once_with(42_42_42)
         pinned_msg.unpin.assert_awaited_once()
-        # 3) セッションが破棄された
+        # 4) セッションが破棄された
         assert SessionManager.instance().is_active() is False
 
     def test_finalize_is_noop_when_no_active_session(self):
-        """二重終了防止: 既に終了済みなら何もしない"""
+        """二重終了防止: 既に終了済みなら制限時間終了通知も結果通知も行わない"""
         cog = _make_cog()
         session = _make_existing_session()
         # SessionManager に登録しない (= is_active() == False)
         channel = MagicMock()
+        channel.send = AsyncMock()
 
         async def run() -> None:
             await cog._finalize_session(session, channel)
 
         asyncio.run(run())
 
+        # 制限時間終了通知も結果通知も走らない
+        channel.send.assert_not_called()
         _bot_mock(cog).notifier.notify_session_result.assert_not_called()
         channel.fetch_message.assert_not_called()
 
@@ -543,8 +553,15 @@ class TestNotifyWarning:
         kwargs = channel.send.call_args.kwargs
         embed = kwargs.get("embed")
         assert isinstance(embed, _discord.Embed)
-        # 警告分数 (config 既定: 10 分) が embed.description に含まれる
-        assert "10" in (embed.description or "")
+        # タイトルに残り分数 (config 既定: 10 分) と ⏰ が含まれる
+        assert embed.title is not None
+        assert "10" in embed.title
+        assert "⏰" in embed.title
+        # description は警告アイコン付きで催促文を含む
+        description = embed.description or ""
+        assert "⚠️" in description
+        assert "10分" in description
+        assert "まだ回答していない方はお早めに" in description
 
     def test_send_failure_is_logged_but_does_not_raise(self):
         """送信失敗時もハンドラ全体を巻き込まない"""
@@ -558,6 +575,51 @@ class TestNotifyWarning:
 
         async def run() -> None:
             await cog._notify_warning(channel)
+
+        # 例外が伝播しない
+        asyncio.run(run())
+        channel.send.assert_awaited_once()
+
+
+class TestNotifyTimeout:
+    """`on_timeout` 経由で呼ばれる制限時間終了通知"""
+
+    def test_sends_timeout_to_channel(self):
+        cog = _make_cog()
+        channel = MagicMock()
+        channel.send = AsyncMock()
+
+        async def run() -> None:
+            await cog._notify_timeout(channel)
+
+        asyncio.run(run())
+
+        channel.send.assert_awaited_once()
+        import discord as _discord
+        kwargs = channel.send.call_args.kwargs
+        embed = kwargs.get("embed")
+        assert isinstance(embed, _discord.Embed)
+        # タイトルに ⏱️ + "制限時間終了"
+        assert embed.title is not None
+        assert "⏱️" in embed.title
+        assert "制限時間終了" in embed.title
+        # 本文は終了告知 + 別チャンネル送信案内
+        description = embed.description or ""
+        assert "制限時間が終了" in description
+        assert "別チャンネル" in description
+
+    def test_send_failure_is_logged_but_does_not_raise(self):
+        """送信失敗時も finalize 処理を妨げない"""
+        import discord as _discord
+
+        cog = _make_cog()
+        channel = MagicMock()
+        channel.send = AsyncMock(
+            side_effect=_discord.HTTPException(MagicMock(), "boom")
+        )
+
+        async def run() -> None:
+            await cog._notify_timeout(channel)
 
         # 例外が伝播しない
         asyncio.run(run())

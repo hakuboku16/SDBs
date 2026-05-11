@@ -8,8 +8,10 @@ src/cogs/input_play.py のユニットテスト
 * `SongRepository` に存在しない楽曲名は ephemeral でエラー応答
 * Happy Path: `PlayRecord` がセッションに追加され、タスク評価結果が embed で返る
 * 進捗があった場合は ``current`` / ``set_value`` が embed に反映される
-* 新規 cleared が発生したらピン留めメッセージの添付画像が差し替えられる
-* 新規 cleared が無いときは画像合成・メッセージ編集が呼ばれない
+* 進捗があったらピン留めメッセージの embed fields がセッションタスクで再構築される
+* 新規 cleared が発生したら合わせてピン留めメッセージの添付画像も差し替えられる
+* 新規 cleared が無い (進捗のみ) ときは画像再合成は走らず embed のみ更新される
+* 進捗自体が無いときは画像合成もメッセージ編集も走らない
 * 楽曲名オートコンプリートが `SongRepository.search_partial` を介して候補を返す
 
 `discord.Interaction` は読み取り専用属性が多いため `tests/cogs/conftest.py` の
@@ -128,12 +130,37 @@ def _make_cog(
 
 
 def _attach_pinned_message(
-    interaction: MagicMock, *, message_id: int = 999_111
+    interaction: MagicMock,
+    *,
+    message_id: int = 999_111,
+    initial_embed: Optional[discord.Embed] = None,
 ) -> MagicMock:
-    """`interaction.channel.fetch_message` をピン留めメッセージ風 mock に差し替える"""
+    """
+    `interaction.channel.fetch_message` をピン留めメッセージ風 mock に差し替える
+
+    `_rebuild_embed_with_tasks` が `message.embeds[0]` をコピー元にするため、
+    既定で title / description / footer / image を備えた embed を 1 件保持させる。
+    呼び出し側で挙動を変えたい場合は ``initial_embed`` を上書き指定する。
+    """
     pinned = MagicMock()
     pinned.id = message_id
     pinned.edit = AsyncMock()
+    if initial_embed is None:
+        initial_embed = discord.Embed(
+            title="🎯 セッション開始",
+            description="- パネル数: 1\n- モザイク: なし (block=300px)",
+            color=discord.Color.blurple(),
+        )
+        initial_embed.set_image(url="attachment://panels.png")
+        initial_embed.set_footer(
+            text="制限時間: 30分 | /play でプレイ情報を送信 | /answer で回答"
+        )
+        # 既存お題 (古い current=0 状態) を field として 1 件持たせ、置換が起きることを
+        # テスト側で観測できるようにする
+        initial_embed.add_field(
+            name="⬜ パネル 0 (0/1)", value="旧お題説明", inline=False
+        )
+    pinned.embeds = [initial_embed]
     interaction.channel.fetch_message = AsyncMock(return_value=pinned)
     return pinned
 
@@ -466,7 +493,7 @@ class TestHappyPath:
         _attach_pinned_message(interaction)
 
         async def run() -> None:
-            await _invoke_play(cog, interaction)
+            await _invoke_play(cog, interaction, charming=150, combo=180)
 
         asyncio.run(run())
 
@@ -477,6 +504,9 @@ class TestHappyPath:
         embed: discord.Embed = kwargs["embed"]
         assert embed.description is not None
         assert "進捗のあったタスクはありません" in embed.description
+        # 進捗無しでも charming / combo は description に表示される
+        assert "charming: 150" in embed.description
+        assert "combo: 180" in embed.description
 
     def test_embed_lists_progressed_tasks(self):
         """進捗があったタスクのみ embed の field に列挙される"""
@@ -522,8 +552,8 @@ class TestHappyPath:
         )
         assert "Lv.99" not in all_field_text
 
-    def test_newly_cleared_task_shows_clear_marker(self):
-        """新規 cleared に到達したタスクは field name 末尾に [クリア!] が付く"""
+    def test_newly_cleared_task_uses_check_symbol_without_marker(self):
+        """新規 cleared に到達したタスクは ✅ シンボルのみで識別され、追加マーカーは付かない"""
         cog = _make_cog()
         # set_value=1 / value=5 → 一発で cleared
         task = make_task(
@@ -545,20 +575,85 @@ class TestHappyPath:
         _, kwargs = interaction.followup.send.call_args
         embed: discord.Embed = kwargs["embed"]
         assert len(embed.fields) == 1
-        # cleared 済みのため symbol は ✅、末尾に "[クリア!]" マーカー
+        # cleared 済みのため symbol は ✅、追加の "[クリア!]" 表記は付かない
         assert embed.fields[0].name is not None
         assert embed.fields[0].name.startswith("✅ パネル 0 (1/1)")
-        assert embed.fields[0].name.endswith("[クリア!]")
+        assert "[クリア!]" not in embed.fields[0].name
+
+    def test_play_info_in_description(self):
+        """description に charming / combo が含まれる"""
+        cog = _make_cog()
+        task = make_task(type="level", set_value=1, value=5)
+        SessionManager.instance().start(_make_session([task]))
+        interaction = make_mock_interaction()
+        _attach_pinned_message(interaction)
+
+        async def run() -> None:
+            # SampleSong の Hard 譜面はノーツ 200 のため、超過しない値を指定する
+            await _invoke_play(cog, interaction, charming=123, combo=156)
+
+        asyncio.run(run())
+
+        _, kwargs = interaction.followup.send.call_args
+        embed: discord.Embed = kwargs["embed"]
+        assert embed.description is not None
+        assert "charming: 123" in embed.description
+        assert "combo: 156" in embed.description
+
+    def test_already_cleared_task_is_omitted_from_embed(self):
+        """プレイ前から cleared 済みのタスクは embed の field に含めない"""
+        cog = _make_cog()
+        # プレイ前から cleared 済みの level タスク
+        # (set_value=1 / value=5 / current=2 → 既に cleared)。
+        # 1 回プレイで Hard=5 にマッチし current が 2→3 と更新されるが、
+        # プレイ前から cleared 済みのため embed には現れない想定。
+        already_cleared = make_task(
+            type="level",
+            set_value=1,
+            value=5,
+            description_template="Lv.valueの譜面を持つ楽曲をset回play",
+            play_quality="プレイ",
+            current=2,
+            cleared=True,
+        )
+        # 比較用: 未クリアで進捗が乗る別のタスク (level=5 マッチ系 / set=2)
+        progressing = make_task(
+            type="level",
+            set_value=2,
+            value=5,
+            description_template="Lv.valueの譜面を持つ楽曲をset回play",
+            play_quality="プレイ",
+        )
+        SessionManager.instance().start(
+            _make_session([already_cleared, progressing])
+        )
+        interaction = make_mock_interaction()
+        _attach_pinned_message(interaction)
+
+        async def run() -> None:
+            await _invoke_play(cog, interaction)
+
+        asyncio.run(run())
+
+        # cleared 済みでも内部状態 (current) は更新される
+        assert already_cleared.current == 3
+        assert already_cleared.cleared is True
+        # 一方で embed の field には現れない (もう一つの進捗 task のみが表示される)
+        _, kwargs = interaction.followup.send.call_args
+        embed: discord.Embed = kwargs["embed"]
+        assert len(embed.fields) == 1
+        assert embed.fields[0].name is not None
+        assert embed.fields[0].name.startswith("⬜ パネル 1 (1/2)")
 
 
 # ==================================================
-# 画像再合成・メッセージ編集
+# ピン留めメッセージの再構築 (embed fields + 任意で画像)
 # ==================================================
-class TestPanelImageRefresh:
-    """新規 cleared 発生 → 画像再合成 → ピン留めメッセージ編集の連鎖を検証する"""
+class TestPinnedMessageRefresh:
+    """進捗発生 → embed fields 再構築 / 新規 cleared 時は画像再合成も伴うことを検証する"""
 
-    def test_image_recomposed_when_new_clear(self):
-        """新規 cleared が起きたら ImageProcessor.compose と message.edit が呼ばれる"""
+    def test_image_recomposed_and_embed_refreshed_when_new_clear(self):
+        """新規 cleared が起きたら compose + message.edit (embed + attachments) が呼ばれる"""
         cog = _make_cog()
         # set_value=1 → 一発で cleared に到達
         task = make_task(type="level", set_value=1, value=5)
@@ -575,17 +670,21 @@ class TestPanelImageRefresh:
         proc = cast(Any, cog)._image_processor
         proc.compose.assert_called_once()
         # ピン留めメッセージが取得され編集される
-        interaction.channel.fetch_message.assert_awaited_once_with(
-            999_111
-        )
+        interaction.channel.fetch_message.assert_awaited_once_with(999_111)
         pinned.edit.assert_awaited_once()
         _, edit_kwargs = pinned.edit.call_args
+        # 添付画像が差し替えられる
         attachments = edit_kwargs.get("attachments")
         assert attachments is not None and len(attachments) == 1
         assert isinstance(attachments[0], discord.File)
+        # embed も同送される (fields は cleared 後の状態に再構築)
+        new_embed: discord.Embed = edit_kwargs["embed"]
+        assert len(new_embed.fields) == 1
+        assert new_embed.fields[0].name is not None
+        assert new_embed.fields[0].name.startswith("✅ パネル 0 (1/1)")
 
-    def test_image_not_recomposed_when_no_new_clear(self):
-        """進捗のみ (cleared に到達せず) では画像再合成も編集も走らない"""
+    def test_embed_refreshed_but_image_skipped_when_no_new_clear(self):
+        """進捗のみ (cleared に到達せず) では画像は再合成されず embed のみ更新される"""
         cog = _make_cog()
         # set_value=3 → 1 回プレイでは cleared にならない
         task = make_task(type="level", set_value=3, value=5)
@@ -601,19 +700,28 @@ class TestPanelImageRefresh:
         # 進捗 +1 されたが cleared にはならない
         assert task.current == 1
         assert task.cleared is False
-        # compose / fetch_message / edit のいずれも呼ばれない
+        # compose は呼ばれない (画像差し替え不要)
         proc = cast(Any, cog)._image_processor
         proc.compose.assert_not_called()
-        interaction.channel.fetch_message.assert_not_called()
-        pinned.edit.assert_not_called()
+        # メッセージ取得 + embed 更新は走る
+        interaction.channel.fetch_message.assert_awaited_once_with(999_111)
+        pinned.edit.assert_awaited_once()
+        _, edit_kwargs = pinned.edit.call_args
+        # attachments は付与されない (embed のみ更新)
+        assert "attachments" not in edit_kwargs
+        new_embed: discord.Embed = edit_kwargs["embed"]
+        # fields は最新進捗 (1/3) で再構築される
+        assert len(new_embed.fields) == 1
+        assert new_embed.fields[0].name is not None
+        assert new_embed.fields[0].name.startswith("⬜ パネル 0 (1/3)")
 
-    def test_image_not_recomposed_when_no_progress(self):
-        """進捗 0 のプレイでは画像再合成も編集も走らない"""
+    def test_no_message_update_when_no_progress(self):
+        """進捗 0 のプレイでは画像合成もメッセージ取得・編集も走らない"""
         cog = _make_cog()
         task = make_task(type="level", set_value=2, value=99)  # マッチしない
         SessionManager.instance().start(_make_session([task]))
         interaction = make_mock_interaction()
-        _attach_pinned_message(interaction)
+        pinned = _attach_pinned_message(interaction)
 
         async def run() -> None:
             await _invoke_play(cog, interaction)
@@ -623,14 +731,91 @@ class TestPanelImageRefresh:
         proc = cast(Any, cog)._image_processor
         proc.compose.assert_not_called()
         interaction.channel.fetch_message.assert_not_called()
+        pinned.edit.assert_not_called()
 
-    def test_compose_failure_logged_but_response_continues(self):
-        """画像合成失敗時も embed の followup は送られる (握りつぶさず警告)"""
+    def test_embed_fields_match_all_session_tasks(self):
+        """embed fields は進捗の有無に関わらず session.tasks 全件で再構築される"""
+        cog = _make_cog()
+        # 1 件は新規 cleared、もう 1 件はマッチせず据え置き
+        match_task = make_task(
+            type="level",
+            set_value=1,
+            value=5,
+            description_template="Lv.valueの譜面をset回play",
+            play_quality="プレイ",
+        )
+        no_match_task = make_task(
+            type="level",
+            set_value=2,
+            value=99,
+            description_template="Lv.valueの譜面をset回play",
+            play_quality="プレイ",
+        )
+        SessionManager.instance().start(
+            _make_session([match_task, no_match_task])
+        )
+        interaction = make_mock_interaction()
+        pinned = _attach_pinned_message(interaction)
+
+        async def run() -> None:
+            await _invoke_play(cog, interaction)
+
+        asyncio.run(run())
+
+        pinned.edit.assert_awaited_once()
+        _, edit_kwargs = pinned.edit.call_args
+        new_embed: discord.Embed = edit_kwargs["embed"]
+        # 全タスクが field として並ぶ (進捗のあったものだけではない)
+        assert len(new_embed.fields) == 2
+        assert new_embed.fields[0].name is not None
+        assert new_embed.fields[0].name.startswith("✅ パネル 0 (1/1)")
+        assert new_embed.fields[1].name is not None
+        assert new_embed.fields[1].name.startswith("⬜ パネル 1 (0/2)")
+
+    def test_embed_metadata_preserved_after_refresh(self):
+        """既存 embed の title / description / footer / color / image は保持される"""
+        cog = _make_cog()
+        task = make_task(type="level", set_value=3, value=5)  # 進捗のみ (新規 cleared 無し)
+        SessionManager.instance().start(_make_session([task]))
+        interaction = make_mock_interaction()
+        # メタ情報を持つカスタム embed を差し込み、保持されることを観測する
+        custom = discord.Embed(
+            title="🎯 セッション開始",
+            description="- パネル数: 4\n- モザイク: 強 (block=45px)",
+            color=discord.Color.blurple(),
+        )
+        custom.set_image(url="attachment://panels.png")
+        custom.set_footer(text="制限時間: 30分 | /play | /answer")
+        custom.add_field(name="旧 field", value="旧 value", inline=False)
+        pinned = _attach_pinned_message(interaction, initial_embed=custom)
+
+        async def run() -> None:
+            await _invoke_play(cog, interaction)
+
+        asyncio.run(run())
+
+        pinned.edit.assert_awaited_once()
+        _, edit_kwargs = pinned.edit.call_args
+        new_embed: discord.Embed = edit_kwargs["embed"]
+        assert new_embed.title == "🎯 セッション開始"
+        assert new_embed.description == (
+            "- パネル数: 4\n- モザイク: 強 (block=45px)"
+        )
+        assert new_embed.color == discord.Color.blurple()
+        assert new_embed.image.url == "attachment://panels.png"
+        assert new_embed.footer.text == "制限時間: 30分 | /play | /answer"
+        # 旧 field は置換されている
+        assert len(new_embed.fields) == 1
+        assert new_embed.fields[0].name is not None
+        assert "旧 field" not in new_embed.fields[0].name
+
+    def test_compose_failure_still_updates_embed(self):
+        """画像合成失敗時も embed の更新は続行され、followup も送られる"""
         cog = _make_cog()
         task = make_task(type="level", set_value=1, value=5)
         SessionManager.instance().start(_make_session([task]))
         interaction = make_mock_interaction()
-        _attach_pinned_message(interaction)
+        pinned = _attach_pinned_message(interaction)
         # compose を意図的に失敗させる
         proc = cast(Any, cog)._image_processor
         proc.compose = MagicMock(
@@ -643,9 +828,13 @@ class TestPanelImageRefresh:
         # 例外が伝播しない
         asyncio.run(run())
 
-        # message.edit は呼ばれない (compose 失敗時にスキップ)
-        interaction.channel.fetch_message.assert_not_called()
-        # embed は依然送信される
+        # 画像差し替えは失敗するが embed 更新は続行される
+        interaction.channel.fetch_message.assert_awaited_once_with(999_111)
+        pinned.edit.assert_awaited_once()
+        _, edit_kwargs = pinned.edit.call_args
+        assert "attachments" not in edit_kwargs  # compose 失敗で添付は付かない
+        assert isinstance(edit_kwargs.get("embed"), discord.Embed)
+        # embed の followup は依然送信される
         interaction.followup.send.assert_awaited_once()
 
     def test_message_edit_failure_logged_but_response_continues(self):

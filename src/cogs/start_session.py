@@ -168,17 +168,13 @@ class StartSessionCog(commands.Cog):
 
         if panel_count not in self._session_config.allowed_panel_counts:
             await interaction.response.send_message(
-                embed=build_error_embed(
-                    f"許可されていないパネル数です: {panel_count}"
-                ),
+                embed=build_error_embed(f"許可されていないパネル数です: {panel_count}"),
                 ephemeral=True,
             )
             return
         if mosaic_label not in self._session_config.mosaic_levels:
             await interaction.response.send_message(
-                embed=build_error_embed(
-                    f"未知のモザイクラベルです: {mosaic_label}"
-                ),
+                embed=build_error_embed(f"未知のモザイクラベルです: {mosaic_label}"),
                 ephemeral=True,
             )
             return
@@ -355,14 +351,37 @@ class StartSessionCog(commands.Cog):
         """
         minutes: int = self._discord_config.warning_minutes_before_end
         embed = build_warning_embed(
-            f"セッション終了まで残り {minutes} 分です。",
-            title="残り時間のお知らせ",
+            (
+                f"セッションの制限時間まで残り{minutes}分です！\n"
+                "まだ回答していない方はお早めに！"
+            ),
+            title=f"⏰ 残り時間: {minutes}分",
         )
         try:
             await channel.send(embed=embed)
         except discord.DiscordException as e:
             # チャンネル削除等で送信不能でも残り処理 (timeout 等) を妨げない
             logger.warning("残り時間警告の送信に失敗しました: %s", e)
+
+    async def _notify_timeout(self, channel: discord.abc.Messageable) -> None:
+        """
+        セッション制限時間到達をセッションチャンネルへ告知する
+
+        結果は `SessionFinalizer` 経由で結果チャンネル (別チャンネル) に送られるため、
+        セッションチャンネル側では「終了したこと」「結果が別チャンネルに行く」だけを案内する。
+        """
+        embed = build_warning_embed(
+            (
+                "セッションの制限時間が終了しました！\n"
+                "結果は別チャンネルに送信されます。"
+            ),
+            title="⏱️ 制限時間終了",
+        )
+        try:
+            await channel.send(embed=embed)
+        except discord.DiscordException as e:
+            # チャンネル削除等で送信不能でも finalize 処理を妨げない
+            logger.warning("制限時間終了通知の送信に失敗しました: %s", e)
 
     async def _finalize_session(
         self,
@@ -372,10 +391,13 @@ class StartSessionCog(commands.Cog):
         """
         セッション制限時間到達時の自動終了処理 (`/end` と同等)
 
-        実処理は `SessionFinalizer.finalize` に委譲します (手動 /end と共通化)。
-        ``summary`` には時間切れである旨を含めて区別します。
-        既に手動 `/end` 等で終了済みの場合は finalizer 側で no-op となります。
+        セッションチャンネルへ「制限時間終了」embed を投稿してから、
+        `SessionFinalizer.finalize` に結果通知・ピン解除・セッション破棄を委譲します
+        (手動 /end と共通化)。``summary`` には時間切れである旨を含めて区別します。
+        既に手動 `/end` 等で終了済みの場合は通知を抑止し、finalizer も no-op となります。
         """
+        if SessionManager.instance().is_active():
+            await self._notify_timeout(channel)
         notifier = getattr(self.bot, "notifier", None)
         await self._session_finalizer.finalize(
             session,

@@ -157,15 +157,17 @@ class TestEndHappyPath:
             followup_kwargs.get("ephemeral") is None
             or followup_kwargs.get("ephemeral") is False
         )
-        # embed として送られ、楽曲名が description に含まれる
+        # embed として送られ、別チャンネル送信案内が含まれる
         embed = followup_kwargs.get("embed")
         import discord as _discord
         assert isinstance(embed, _discord.Embed)
         # タイトルに絵文字 + "セッション終了"
         assert embed.title is not None and "✅" in embed.title
         assert "セッション終了" in embed.title
+        # 本文は終了告知 + 別チャンネル送信案内 (楽曲名は含めない)
         assert embed.description is not None
-        assert "Magnolia" in embed.description
+        assert "セッションが終了しました" in embed.description
+        assert "別チャンネル" in embed.description
 
     def test_passes_none_notifier_when_bot_has_no_notifier(self):
         """`bot.notifier` 未設定なら ``None`` を finalizer に渡す"""
