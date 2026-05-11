@@ -288,13 +288,22 @@ class TaskEvaluator:
     def _eval_level_total(
         self, task: Task, play_record: PlayRecord, all_plays, song_repo
     ) -> int:
-        """全プレイの (プレイした難易度の) レベル合計 (quality フィルタ後)"""
+        """全プレイの (プレイした難易度の) レベル合計 (quality フィルタ後)
+
+        Ex 譜面のうちレベル値が文字列 (例: "L" / "01001100") の楽曲は
+        all_topics.json 側の仕様注釈「(補足)Ex譜面のうち英語、2進数表記のものは除く」
+        に従い集計対象から除外する。
+        """
         total = 0
         for pr in all_plays:
             if not self._satisfies_quality(task, pr, song_repo):
                 continue
             song = self._required_song(song_repo, pr.song_name)
-            total += self._required_level(song, pr.difficulty)
+            level = song.levels.get(pr.difficulty)
+            # bool は int の派生型のため明示的に除外する
+            if not isinstance(level, int) or isinstance(level, bool):
+                continue
+            total += level
         return total
 
     def _eval_result_charming_total(

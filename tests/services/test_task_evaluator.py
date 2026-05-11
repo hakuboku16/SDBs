@@ -342,6 +342,63 @@ class TestCumulativeEvaluators:
         # play_record は形式上必要だが評価には用いられない (任意の値で良い)
         assert evaluator.evaluate(task, _play(), [], fake_repo) == 0
 
+    def test_level_total_skips_non_int_level(
+        self, evaluator: TaskEvaluator, tmp_path: Path
+    ):
+        """
+        all_topics.json の仕様注釈
+        「(補足)Ex譜面のうち英語、2進数表記のものは除く」に従い、
+        レベル値が int でないプレイは集計対象から除外され
+        TypeError を発生させない
+        """
+        # Ex 譜面のレベル値が文字列 ("L") の楽曲を含む構成を用意
+        data = {
+            "Story": {
+                "Vol.1": {
+                    "Entrance": {
+                        "VERSION": "1.2",
+                        "LEVEL": {
+                            "Easy": 2,
+                            "Normal": 8,
+                            "Hard": 10,
+                            "Extra": "L",
+                        },
+                        "NOTES": {
+                            "Easy": 234,
+                            "Normal": 585,
+                            "Hard": 742,
+                            "Extra": 999,
+                        },
+                        "TIME": 113,
+                        "COMPOSER": ["Ice"],
+                    },
+                    "Dream": {
+                        "VERSION": "1.0",
+                        "LEVEL": {"Easy": 1, "Normal": 4, "Hard": 8},
+                        "NOTES": {"Easy": 78, "Normal": 313, "Hard": 485},
+                        "TIME": 130,
+                        "COMPOSER": ["Rabpit"],
+                    },
+                },
+            },
+        }
+        songs_json = tmp_path / "songs.json"
+        songs_json.write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8"
+        )
+        images_dir = tmp_path / "images"
+        images_dir.mkdir()
+        repo = SongRepository(songs_json=songs_json, images_dir=images_dir)
+
+        plays = [
+            # Extra 譜面 (level="L") はスキップされる
+            _play(song_name="Entrance", difficulty="Extra"),
+            # Normal 譜面 (level=4) のみ集計される
+            _play(song_name="Dream", difficulty="Normal"),
+        ]
+        task = make_task(type="level_total", set_value=30, value=None)
+        assert evaluator.evaluate(task, plays[-1], plays, repo) == 4
+
     def test_result_charming_total(
         self, evaluator: TaskEvaluator, fake_repo: SongRepository
     ):
