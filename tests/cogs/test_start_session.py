@@ -558,9 +558,8 @@ class TestNotifyWarning:
         assert embed.title is not None
         assert "10" in embed.title
         assert "⏰" in embed.title
-        # description は警告アイコン付きで催促文を含む
+        # description は残り分数と催促文を含む (絵文字は title 側に集約)
         description = embed.description or ""
-        assert "⚠️" in description
         assert "10分" in description
         assert "まだ回答していない方はお早めに" in description
 
