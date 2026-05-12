@@ -133,9 +133,11 @@ class TestNotifyError:
 class TestNotifySessionResult:
     """`notify_session_result` の振る舞い"""
 
-    def test_sends_embed_with_masked_title_and_image_attachment(self):
+    def test_sends_embed_with_spoiler_song_in_description_and_image_attachment(self):
         """
-        マスク済み楽曲名を embed タイトルに、合成画像を添付 + embed.image として送る
+        スポイラー楽曲名を embed.description に、合成画像を添付 + embed.image として送る
+
+        embed.title はスポイラー記法を描画しないため、楽曲名は description 側に出す。
         """
         channel = _make_async_send_channel()
         client = _make_client_with_text_channel({200: channel})
@@ -146,7 +148,7 @@ class TestNotifySessionResult:
         _run(
             notifier.notify_session_result(
                 image=image,
-                masked_song_name="*****",
+                spoiler_song_name="||Magnolia            ||",
                 correct_answerers=[(1, "alice"), (2, "bob")],
                 summary="セッション終了",
             )
@@ -159,8 +161,11 @@ class TestNotifySessionResult:
         # embed が渡される
         embed = kwargs["embed"]
         assert isinstance(embed, discord.Embed)
-        assert embed.title == "*****"
-        assert embed.description == "セッション終了"
+        # title は固定文言、楽曲名は description にスポイラーで載る
+        assert embed.title == "🎵 セッション結果"
+        assert embed.description is not None
+        assert "セッション終了" in embed.description
+        assert "||Magnolia            ||" in embed.description
         # embed.image.url は attachment スキーム
         assert embed.image.url == "attachment://session_result.png"
         # 正解者 field が含まれる
@@ -182,7 +187,7 @@ class TestNotifySessionResult:
         _run(
             notifier.notify_session_result(
                 image=BytesIO(b"x"),
-                masked_song_name="***",
+                spoiler_song_name="||short               ||",
                 correct_answerers=set(),
             )
         )
@@ -200,7 +205,7 @@ class TestNotifySessionResult:
         _run(
             notifier.notify_session_result(
                 image=BytesIO(b"x"),
-                masked_song_name="***",
+                spoiler_song_name="||short               ||",
                 correct_answerers={(3, "charlie"), (1, "alice"), (2, "bob")},
             )
         )
@@ -237,7 +242,7 @@ class TestSkipsAndWarnings:
             _run(
                 notifier.notify_session_result(
                     image=BytesIO(b"x"),
-                    masked_song_name="***",
+                    spoiler_song_name="||short               ||",
                     correct_answerers=[],
                     summary="dummy",
                 )

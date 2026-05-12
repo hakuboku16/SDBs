@@ -8,7 +8,7 @@ session_finalizer.py のユニットテスト
 * 画像合成失敗時は通知をスキップしつつピン解除・セッション破棄は継続すること
 * `pinned_message_id` が None の場合はピン解除を試みないこと
 * notifier 未初期化 (`None`) の場合は警告ログを残し通知をスキップすること
-* `mask_song_name` の単体挙動
+* `format_spoiler_song_name` の単体挙動
 """
 
 import asyncio
@@ -93,16 +93,32 @@ def reset_singleton():
 
 
 # ==================================================
-# mask_song_name
+# format_spoiler_song_name
 # ==================================================
-class TestMaskSongName:
-    """`mask_song_name` の振る舞い"""
+class TestFormatSpoilerSongName:
+    """`format_spoiler_song_name` の振る舞い"""
 
-    def test_replaces_with_asterisks_of_same_length(self):
-        assert SessionFinalizer.mask_song_name("Magnolia") == "*" * len("Magnolia")
+    def test_pads_short_name_to_min_width_inside_spoiler(self):
+        """20 文字未満は半角スペースで 20 文字まで右パディングしてスポイラーで包む"""
+        result = SessionFinalizer.format_spoiler_song_name("Magnolia")
+        assert result == "||" + "Magnolia".ljust(20) + "||"
+        assert result.startswith("||") and result.endswith("||")
+        # 内側の文字数は 20 (パディングが効いている)
+        assert len(result) - 4 == 20
 
-    def test_returns_single_asterisk_for_empty_string(self):
-        assert SessionFinalizer.mask_song_name("") == "*"
+    def test_keeps_long_name_unpadded(self):
+        """20 文字以上は切り詰めずそのまま包む"""
+        long_name = "A" * 25
+        assert SessionFinalizer.format_spoiler_song_name(long_name) == f"||{long_name}||"
+
+    def test_exactly_min_width_is_not_padded(self):
+        """ちょうど 20 文字なら追加のスペースは入らない"""
+        name = "A" * 20
+        assert SessionFinalizer.format_spoiler_song_name(name) == f"||{name}||"
+
+    def test_empty_string_yields_min_width_padding(self):
+        """空文字でも 20 文字分の隠し幅を確保する"""
+        assert SessionFinalizer.format_spoiler_song_name("") == "||" + " " * 20 + "||"
 
 
 # ==================================================
@@ -129,8 +145,8 @@ class TestFinalizeHappyPath:
         # 1) 結果通知が呼ばれる
         notifier.notify_session_result.assert_awaited_once()
         kwargs = notifier.notify_session_result.await_args.kwargs
-        # マスク済みタイトル
-        assert kwargs["masked_song_name"] == "*" * len("Magnolia")
+        # 楽曲名はスポイラー記法で包まれ、20 文字未満は右パディングされて渡る
+        assert kwargs["spoiler_song_name"] == "||" + "Magnolia".ljust(20) + "||"
         # 正解者は session の set がそのまま渡る
         assert kwargs["correct_answerers"] == session.correct_answerers
         assert kwargs["summary"] == "セッション終了"

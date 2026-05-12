@@ -508,7 +508,8 @@ class TestFinalizeSession:
         _bot_mock(cog).notifier.notify_session_result.assert_awaited_once()
         kwargs = _bot_mock(cog).notifier.notify_session_result.await_args.kwargs
         assert kwargs["summary"] == "セッション終了 (時間切れ)"
-        assert kwargs["masked_song_name"] == "*" * len(session.song_name)
+        # 楽曲名はスポイラー記法で包まれ、20 文字未満は半角スペースで右パディングされて渡る
+        assert kwargs["spoiler_song_name"] == "||" + session.song_name.ljust(20) + "||"
         # 3) ピン解除が呼ばれた
         channel.fetch_message.assert_awaited_once_with(42_42_42)
         pinned_msg.unpin.assert_awaited_once()

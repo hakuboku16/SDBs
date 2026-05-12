@@ -101,10 +101,13 @@ class DiscordNotifier:
             embed=embed,
         )
 
+    # 結果通知 embed の固定タイトル (楽曲名は description にスポイラーで載せるため)
+    _RESULT_EMBED_TITLE: str = "🎵 セッション結果"
+
     async def notify_session_result(
         self,
         image: BytesIO,
-        masked_song_name: str,
+        spoiler_song_name: str,
         correct_answerers: Iterable[tuple[int, str]],
         summary: Optional[str] = None,
     ) -> None:
@@ -112,28 +115,33 @@ class DiscordNotifier:
         セッション終了時の結果を結果チャンネルへ embed で通知する
 
         embed 構成:
-            - title: マスク済みの楽曲名 (例: "***")
-            - description: 任意の補足テキスト (時間切れ表記など。None なら省略)
+            - title: 固定文言 ("🎵 セッション結果")
+            - description: 任意の補足テキスト + 楽曲名 (スポイラー)。
+              embed.title はスポイラー記法を描画しないため、楽曲名は description に出す。
             - image: 現状の合成パネル画像
             - field "正解者": ``correct_answerers`` のユーザー名一覧。
               0 件の場合は「正解者なし」を表示する。
 
         Args:
             image: 現状の合成画像 (PNG, シーク位置は呼び出し側で先頭にしておく)
-            masked_song_name: マスク済みの楽曲名 (例: "***")
+            spoiler_song_name: スポイラー記法で包んだ楽曲名 (例: "||Magnolia            ||")
             correct_answerers: 正解者の ``(user_id, user_name)`` の反復子。
                 ``set`` 由来の場合は反復順が不定なため、内部で ``user_name`` 昇順に
                 ソートしてから表示する。
-            summary: embed description に出す補足文。``None`` なら設定しない。
+            summary: embed description に出す補足文。``None`` なら省略する。
         """
         # 反復順は呼び出し側 (set など) で不定の可能性があるため、表示安定化のため名前で昇順ソート
         answerer_list: list[tuple[int, str]] = sorted(
             correct_answerers, key=lambda pair: pair[1]
         )
 
+        song_line: str = f"楽曲名: {spoiler_song_name}"
+        description: str = (
+            f"{summary}\n{song_line}" if summary is not None else song_line
+        )
         embed: discord.Embed = discord.Embed(
-            title=masked_song_name,
-            description=summary,
+            title=self._RESULT_EMBED_TITLE,
+            description=description,
         )
         # 添付ファイルを embed の画像として参照する (attachment スキーム)
         embed.set_image(url=f"attachment://{self._RESULT_IMAGE_FILENAME}")

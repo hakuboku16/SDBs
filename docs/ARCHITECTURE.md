@@ -310,7 +310,7 @@ ENVIRONMENT=development
       - [src/services/discord_notifier.py](src/services/discord_notifier.py): `DiscordNotifier` クラスを実装
         - コンストラクタで `discord.Client` と `DiscordConfig` を受け取り、`log_channel_id` / `result_channel_id` を保持
         - `notify_error(message: str, exc: BaseException | None = None) -> None` — ログチャンネルへエラー詳細を送信（traceback 整形含む）
-        - `notify_session_result(image: BytesIO, masked_song_name: str, summary: str) -> None` — 結果チャンネルへ画像と集計を送信
+        - `notify_session_result(image: BytesIO, spoiler_song_name: str, summary: str) -> None` — 結果チャンネルへ画像と集計を送信 (楽曲名は description にスポイラー記法で出す)
         - チャンネル ID 未設定 / チャンネル取得失敗時は warning ログのみ出して握りつぶさない（[src/core/logger.py](src/core/logger.py) を経由）
       - テスト: [tests/services/test_discord_notifier.py](tests/services/test_discord_notifier.py)（`discord.Client` を mock し、`get_channel`・`send` 呼び出しの引数を検証。ID 未設定時に send が呼ばれないことも確認）
     - [x] **4.2: Bot クラスと cog 自動ロード基盤**
