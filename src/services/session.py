@@ -79,7 +79,12 @@ class Session:
         channel_id: セッションを開始した Discord チャンネル ID
         owner_id: セッションを開始した Discord ユーザー ID
         started_at: セッション開始時刻
-        rotate: 画像合成時に 90/180/270 度のランダム回転を行うか
+        rotate: 画像合成時にランダム回転を行うか (UI 表示用フラグ)。実際の角度は
+            `rotation_angle` を参照する。
+        rotation_angle: 画像合成に用いる固定回転角度 (度)。`None` なら回転なし。
+            `/start` 時に `ImageProcessor.pick_rotation_angle()` で 1 度だけ決定し、
+            セッション中の全ての再合成 (`/play` パネルめくり / `/end` 結果通知) で
+            この値を再利用することで、画像の向きをセッション内で固定する。
         grayscale: 画像合成時にグレースケール化するか
         mosaic_block: モザイクの block 画素数 (大きいほど弱い)
         play_records: /play で蓄積するプレイ履歴 (時系列)
@@ -100,6 +105,7 @@ class Session:
     owner_id: int
     started_at: datetime
     rotate: bool = False
+    rotation_angle: Optional[int] = None
     grayscale: bool = False
     mosaic_block: int = 300
     play_records: list[PlayRecord] = field(default_factory=list)

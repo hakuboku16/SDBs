@@ -101,12 +101,31 @@ class TestSessionInit:
         """
         session = _make_session()
         assert session.rotate is False
+        # rotation_angle は未指定なら None (回転なし) で start_session が決定して書き込む
+        assert session.rotation_angle is None
         assert session.grayscale is False
         assert session.mosaic_block == 300
         assert session.play_records == []
         assert session.answer_records == []
         # ピン留めメッセージ ID は /start 完了後に書き込むため初期値は None
         assert session.pinned_message_id is None
+
+    def test_rotation_angle_can_be_assigned(self):
+        """
+        rotation_angle は /start で決定された角度を保持し、以降の再合成で参照される
+        """
+        session = Session(
+            song_name="Aragami",
+            panel_count=4,
+            tasks=[_make_task() for _ in range(4)],
+            channel_id=111,
+            owner_id=222,
+            started_at=datetime(2026, 5, 3, 10, 0, 0, tzinfo=timezone.utc),
+            rotate=True,
+            rotation_angle=180,
+        )
+        assert session.rotate is True
+        assert session.rotation_angle == 180
 
     def test_pinned_message_id_can_be_assigned(self):
         """

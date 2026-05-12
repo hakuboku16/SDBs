@@ -90,17 +90,31 @@ class ImageProcessor:
     # --------------------------------------------------
     # 単一画像エフェクト
     # --------------------------------------------------
-    def _apply_rotation(self, image: Image.Image) -> Image.Image:
+    def pick_rotation_angle(self) -> int:
         """
-        画像に 90 / 180 / 270 度のランダム回転を適用する
+        回転に用いる角度 (90 / 180 / 270 度) をランダムに 1 つ選んで返す
+
+        Why: 1 セッションを通じて回転角度を固定するため、角度決定 (`pick_rotation_angle`)
+        と適用 (`compose` への `rotation_angle` 引数) を分離している。呼び出し側 (cog)
+        が決定済みの角度を `Session` に保持し、その後の `compose` 呼び出しで同じ角度を
+        繰り返し渡せる構造にする。
+
+        Returns:
+            `_ROTATE_CHOICES` のいずれかの角度 (度)
+        """
+        return self._rng.choice(self._ROTATE_CHOICES)
+
+    def _apply_rotation(self, image: Image.Image, angle: int) -> Image.Image:
+        """
+        指定された角度で画像を回転する
 
         Args:
             image: 元画像
+            angle: 回転角度 (度)。`_ROTATE_CHOICES` 想定だが他角度でも動作する
 
         Returns:
             回転後の新しい画像 (元画像は変更しない)
         """
-        angle: int = self._rng.choice(self._ROTATE_CHOICES)
         # expand=True にすると回転後にキャンバスが拡張されるが、
         # 90/180/270 度では正方形のまま、サイズが保たれる前提で expand=False を選択
         return image.rotate(angle, expand=False)
@@ -269,7 +283,7 @@ class ImageProcessor:
         song_name: str,
         panel_count: int,
         cleared_indices: set[int],
-        rotate: bool,
+        rotation_angle: Optional[int],
         grayscale: bool,
         mosaic_block: int,
     ) -> BytesIO:
@@ -278,16 +292,21 @@ class ImageProcessor:
 
         処理順序 (ARCHITECTURE.md「パネル画像合成」節準拠):
             1. 元画像を読み込む
-            2. rotate=True なら 90/180/270 度ランダム回転
+            2. rotation_angle が指定されていればその角度で回転 (None ならスキップ)
             3. grayscale=True ならグレースケール化
             4. mosaic_block でモザイク
             5. パネルグリッド合成 (cleared_indices のセルは未塗りで透過)
+
+        Why rotation_angle: セッション間で同じ角度を再現するため、角度決定 (cog 層で
+        `pick_rotation_angle` を 1 度だけ呼ぶ) と適用 (本メソッドへの引数) を分離する。
+        以前は bool フラグでランダム選択していたため、`compose` を複数回呼ぶと毎回
+        違う角度になりセッション内で画像の向きが変動するバグがあった。
 
         Args:
             song_name: 楽曲名 (`Song.name` と一致するもの)
             panel_count: パネルの総数 (平方数)。`SessionConfig.allowed_panel_counts` 準拠を想定
             cleared_indices: クリア済みパネルの 0-origin index 集合
-            rotate: ランダム回転を適用するか
+            rotation_angle: 回転角度 (度)。`None` なら回転なし
             grayscale: グレースケール化を適用するか
             mosaic_block: モザイクの中間解像度 (1 以上)
 
@@ -307,8 +326,8 @@ class ImageProcessor:
 
         image: Image.Image = self._load_image(song_name)
 
-        if rotate:
-            image = self._apply_rotation(image)
+        if rotation_angle is not None:
+            image = self._apply_rotation(image, angle=rotation_angle)
         if grayscale:
             image = self._apply_grayscale(image)
         image = self._apply_mosaic(image, block=mosaic_block)

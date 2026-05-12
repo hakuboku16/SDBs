@@ -121,44 +121,49 @@ class TestLoadImage:
 # ==================================================
 class TestApplyRotation:
     """
-    `_apply_rotation` の挙動を検証
+    `_apply_rotation` および `pick_rotation_angle` の挙動を検証
     """
 
     def test_rotation_keeps_size(self, processor: ImageProcessor):
         """
-        90/180/270 度の回転後も画像サイズは保たれる (expand=False)
+        指定角度で回転しても画像サイズは保たれる (expand=False)
         """
         image = processor._load_image("Sample Song")
-        rotated = processor._apply_rotation(image)
+        rotated = processor._apply_rotation(image, angle=90)
         assert rotated.size == image.size
 
     def test_rotation_actually_changes_pixels(self, processor: ImageProcessor):
         """
-        回転後は左上ピクセルの色が元画像 (赤) と異なる (90/180/270 いずれでも)
+        回転後は左上ピクセルの色が元画像 (赤) と異なる
         """
         image = processor._load_image("Sample Song")
         original_top_left = image.getpixel((0, 0))
-        rotated = processor._apply_rotation(image)
+        rotated = processor._apply_rotation(image, angle=90)
         assert rotated.getpixel((0, 0)) != original_top_left
 
-    def test_rotation_uses_only_90_180_270(self, fake_repo: SongRepository):
+    def test_pick_rotation_angle_returns_only_90_180_270(
+        self, fake_repo: SongRepository
+    ):
         """
-        choice の母集団が 90/180/270 のみ (0 度や 45 度などが混入しない)
-        100 回試行して、各角度の結果ピクセルが想定 3 通りのいずれかと一致するかで検証
+        `pick_rotation_angle` の戻り値は 90/180/270 のいずれか
+        100 回試行して 3 角度のいずれかであることを確認する。
         """
         proc = ImageProcessor(song_repository=fake_repo)
-        image = proc._load_image("Sample Song")
-
-        # 期待される 90/180/270 度の左上ピクセル色を事前計算
-        expected_pixels = {
-            image.rotate(90, expand=False).getpixel((0, 0)),
-            image.rotate(180, expand=False).getpixel((0, 0)),
-            image.rotate(270, expand=False).getpixel((0, 0)),
-        }
-
+        allowed = {90, 180, 270}
         for _ in range(100):
-            rotated = proc._apply_rotation(image)
-            assert rotated.getpixel((0, 0)) in expected_pixels
+            assert proc.pick_rotation_angle() in allowed
+
+    def test_pick_rotation_angle_uses_injected_rng(
+        self, fake_repo: SongRepository
+    ):
+        """
+        rng を注入した場合、`pick_rotation_angle` は注入した seed に従って決定論的に動く。
+        Why: セッション開始時に決めた角度がテストでも再現できることを保証する。
+        """
+        proc1 = ImageProcessor(song_repository=fake_repo, rng=random.Random(42))
+        proc2 = ImageProcessor(song_repository=fake_repo, rng=random.Random(42))
+        # 同 seed なら最初の結果は一致
+        assert proc1.pick_rotation_angle() == proc2.pick_rotation_angle()
 
 
 # ==================================================
@@ -388,7 +393,7 @@ class TestCompose:
             song_name="Sample Song",
             panel_count=4,
             cleared_indices=set(),
-            rotate=False,
+            rotation_angle=None,
             grayscale=False,
             mosaic_block=300,
         )
@@ -410,7 +415,7 @@ class TestCompose:
             song_name="Sample Song",
             panel_count=4,
             cleared_indices={0, 1, 2, 3},
-            rotate=False,
+            rotation_angle=None,
             grayscale=False,
             mosaic_block=300,
         )
@@ -431,7 +436,7 @@ class TestCompose:
             song_name="Sample Song",
             panel_count=4,
             cleared_indices=set(),
-            rotate=False,
+            rotation_angle=None,
             grayscale=False,
             mosaic_block=300,
         )
@@ -450,7 +455,7 @@ class TestCompose:
             song_name="Sample Song",
             panel_count=4,
             cleared_indices={0, 3},
-            rotate=False,
+            rotation_angle=None,
             grayscale=False,
             mosaic_block=300,
         )
@@ -473,7 +478,7 @@ class TestCompose:
             song_name="Sample Song",
             panel_count=4,
             cleared_indices={0, 1, 2, 3},
-            rotate=False,
+            rotation_angle=None,
             grayscale=True,
             mosaic_block=300,
         )
@@ -495,7 +500,7 @@ class TestCompose:
             song_name="Sample Song",
             panel_count=4,
             cleared_indices={0, 1, 2, 3},
-            rotate=False,
+            rotation_angle=None,
             grayscale=False,
             mosaic_block=1,
         )
@@ -507,13 +512,13 @@ class TestCompose:
         self, processor: ImageProcessor
     ):
         """
-        rotate=True なら 4 象限の色配置が変わる (cleared 全セルで全画素を露出させて確認)
+        rotation_angle 指定で 4 象限の色配置が変わる (cleared 全セルで全画素を露出させて確認)
         """
         original_buffer = processor.compose(
             song_name="Sample Song",
             panel_count=4,
             cleared_indices={0, 1, 2, 3},
-            rotate=False,
+            rotation_angle=None,
             grayscale=False,
             mosaic_block=300,
         )
@@ -521,7 +526,7 @@ class TestCompose:
             song_name="Sample Song",
             panel_count=4,
             cleared_indices={0, 1, 2, 3},
-            rotate=True,
+            rotation_angle=90,
             grayscale=False,
             mosaic_block=300,
         )
@@ -541,7 +546,7 @@ class TestCompose:
             song_name="Sample Song",
             panel_count=panel_count,
             cleared_indices=set(),
-            rotate=False,
+            rotation_angle=None,
             grayscale=False,
             mosaic_block=300,
         )
@@ -558,7 +563,7 @@ class TestCompose:
                 song_name="Sample Song",
                 panel_count=4,
                 cleared_indices=set(),
-                rotate=False,
+                rotation_angle=None,
                 grayscale=False,
                 mosaic_block=0,
             )
@@ -572,7 +577,7 @@ class TestCompose:
                 song_name="Sample Song",
                 panel_count=5,
                 cleared_indices=set(),
-                rotate=False,
+                rotation_angle=None,
                 grayscale=False,
                 mosaic_block=300,
             )
@@ -588,7 +593,7 @@ class TestCompose:
                 song_name="Sample Song",
                 panel_count=4,
                 cleared_indices={4},
-                rotate=False,
+                rotation_angle=None,
                 grayscale=False,
                 mosaic_block=300,
             )
@@ -602,7 +607,7 @@ class TestCompose:
                 song_name="Nonexistent Song",
                 panel_count=4,
                 cleared_indices=set(),
-                rotate=False,
+                rotation_angle=None,
                 grayscale=False,
                 mosaic_block=300,
             )

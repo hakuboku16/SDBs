@@ -125,7 +125,7 @@ class SessionFinalizer:
                 song_name=session.song_name,
                 panel_count=session.panel_count,
                 cleared_indices=session.cleared_panel_indices(),
-                rotate=session.rotate,
+                rotation_angle=session.rotation_angle,
                 grayscale=session.grayscale,
                 mosaic_block=session.mosaic_block,
             )

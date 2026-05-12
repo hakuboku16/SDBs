@@ -358,6 +358,72 @@ class TestStartHappyPath:
         assert session is not None
         assert session.panel_count == 16
 
+    def test_rotation_angle_picked_once_and_saved_to_session(self):
+        """
+        rotate=True で /start すると、`pick_rotation_angle` が 1 度だけ呼ばれ、
+        その値が `Session.rotation_angle` と `compose` 引数に同じ値で伝播する。
+
+        Why: セッション中の compose 再呼び出し (input_play / session_finalizer) で
+        同じ角度を再利用するためのキー機構。1 度だけ決定する点を担保しないと、
+        cog 内で `pick_rotation_angle` を複数回呼ぶ実装に逆戻りしうる。
+        """
+        cog = _make_cog()
+        interaction = make_mock_interaction()
+        sent_message = _make_followup_message()
+        _attach_followup_message(interaction, sent_message)
+
+        # pick_rotation_angle を決定論的に固定
+        proc: Any = cog._image_processor  # type: ignore[attr-defined]
+        proc.pick_rotation_angle = MagicMock(return_value=180)
+
+        captured: dict[str, Optional[Session]] = {"session": None}
+
+        async def run() -> None:
+            await _invoke_start(cog, interaction, rotate=True)
+            captured["session"] = SessionManager.instance().current()
+            SessionManager.instance().reset()
+
+        asyncio.run(run())
+
+        # /start の中で 1 度だけ呼ばれる (再合成時にもう一度引かないこと)
+        proc.pick_rotation_angle.assert_called_once_with()
+        session = captured["session"]
+        assert session is not None
+        assert session.rotate is True
+        assert session.rotation_angle == 180
+        # compose には Session に保存したのと同じ角度が渡る
+        compose_kwargs = proc.compose.call_args.kwargs
+        assert compose_kwargs["rotation_angle"] == 180
+
+    def test_rotation_angle_is_none_when_rotate_false(self):
+        """
+        rotate=False (デフォルト) では `pick_rotation_angle` は呼ばれず、
+        `Session.rotation_angle` も `None` のまま (回転なし)。
+        """
+        cog = _make_cog()
+        interaction = make_mock_interaction()
+        sent_message = _make_followup_message()
+        _attach_followup_message(interaction, sent_message)
+
+        proc: Any = cog._image_processor  # type: ignore[attr-defined]
+        proc.pick_rotation_angle = MagicMock(return_value=90)
+
+        captured: dict[str, Optional[Session]] = {"session": None}
+
+        async def run() -> None:
+            await _invoke_start(cog, interaction)
+            captured["session"] = SessionManager.instance().current()
+            SessionManager.instance().reset()
+
+        asyncio.run(run())
+
+        proc.pick_rotation_angle.assert_not_called()
+        session = captured["session"]
+        assert session is not None
+        assert session.rotation_angle is None
+        compose_kwargs = proc.compose.call_args.kwargs
+        assert compose_kwargs["rotation_angle"] is None
+
     def test_mosaic_argument_overrides_default(self):
         """mosaic 引数で指定したラベルから block 値が解決される"""
         cog = _make_cog()

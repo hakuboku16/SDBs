@@ -686,6 +686,33 @@ class TestPinnedMessageRefresh:
         # (旧 CDN URL のままだと新 attachment が embed 外に別画像として表示される)。
         assert new_embed.image.url == "attachment://panels.png"
 
+    def test_compose_receives_session_rotation_angle(self):
+        """
+        パネル再合成時、`compose` には `Session.rotation_angle` がそのまま渡される。
+
+        Why: セッション開始時に決定した角度を全 compose 呼び出しで再利用するための
+        鍵。`session.rotation_angle` ではなく毎回ランダムに引いてしまうと、再合成の
+        たびに画像の向きが変わってしまう (本リグレッションテスト)。
+        """
+        cog = _make_cog()
+        task = make_task(type="level", set_value=1, value=5)  # 一発 cleared
+        session = _make_session([task])
+        session.rotate = True
+        session.rotation_angle = 180
+        SessionManager.instance().start(session)
+        interaction = make_mock_interaction()
+        _attach_pinned_message(interaction)
+
+        async def run() -> None:
+            await _invoke_play(cog, interaction)
+
+        asyncio.run(run())
+
+        proc = cast(Any, cog)._image_processor
+        proc.compose.assert_called_once()
+        compose_kwargs = proc.compose.call_args.kwargs
+        assert compose_kwargs["rotation_angle"] == 180
+
     def test_embed_image_rebound_to_attachment_when_image_replaced(self):
         """本番環境では送信後に embed.image.url が Discord により CDN URL に
         書き換えられる。その状態から attachments を差し替える際は、新 embed の

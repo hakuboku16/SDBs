@@ -158,6 +158,30 @@ class TestFinalizeHappyPath:
         # 3) セッションが破棄される
         assert SessionManager.instance().is_active() is False
 
+    def test_compose_receives_session_rotation_angle(self):
+        """
+        終了時の最終画像合成では、`compose` に `Session.rotation_angle` がそのまま渡る。
+
+        Why: セッション開始時に決定した角度を結果通知でも再利用しないと、結果チャン
+        ネルに送る画像とセッション中ユーザーが見ていた画像で向きが食い違う (本リグ
+        レッションテスト)。
+        """
+        proc = _make_image_processor()
+        finalizer = SessionFinalizer(image_processor=proc)
+        session = _make_session()
+        session.rotate = True
+        session.rotation_angle = 270
+        SessionManager.instance().start(session)
+
+        notifier = _make_notifier()
+        channel, _ = _make_channel_with_pinned_message()
+
+        _run(finalizer.finalize(session, channel, notifier))
+
+        proc.compose.assert_called_once()
+        compose_kwargs = proc.compose.call_args.kwargs
+        assert compose_kwargs["rotation_angle"] == 270
+
     def test_passes_correct_answerers_from_session(self):
         """`Session.correct_answerers` がそのまま notifier に渡される"""
         proc = _make_image_processor()

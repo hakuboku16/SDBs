@@ -228,17 +228,25 @@ class StartSessionCog(commands.Cog):
         # ----- 6) タスク生成 -----
         tasks = self._task_generator.generate(panel_count)
 
-        # ----- 7) 初期画像合成 (全パネル未開放) -----
+        # ----- 7) 回転角度の決定 (セッションを通して固定) -----
+        # Why: `compose` は 3 箇所 (start / play / end) から独立に呼ばれる。以前は
+        # bool フラグでランダム選択していたため、再合成のたびに角度が変動していた。
+        # 角度を 1 度だけ決めて `Session.rotation_angle` に保存し以降は再利用する。
+        rotation_angle: Optional[int] = (
+            self._image_processor.pick_rotation_angle() if rotate else None
+        )
+
+        # ----- 8) 初期画像合成 (全パネル未開放) -----
         image_buffer = self._image_processor.compose(
             song_name=chosen.name,
             panel_count=panel_count,
             cleared_indices=set(),
-            rotate=rotate,
+            rotation_angle=rotation_angle,
             grayscale=grayscale,
             mosaic_block=mosaic_block,
         )
 
-        # ----- 8) Session 構築 -----
+        # ----- 9) Session 構築 -----
         session: Session = Session(
             song_name=chosen.name,
             panel_count=panel_count,
@@ -247,11 +255,12 @@ class StartSessionCog(commands.Cog):
             owner_id=interaction.user.id,
             started_at=datetime.now(timezone.utc),
             rotate=rotate,
+            rotation_angle=rotation_angle,
             grayscale=grayscale,
             mosaic_block=mosaic_block,
         )
 
-        # ----- 9) メッセージ投稿 (タスク一覧 + パネル画像) -----
+        # ----- 10) メッセージ投稿 (タスク一覧 + パネル画像) -----
         # Bot からの送信は embed 統一の方針 (要件: メッセージはすべて embed 形式)。
         # 画像は同送する `discord.File` を embed.image に attachment スキームで参照させる。
         file = discord.File(image_buffer, filename=_PANEL_IMAGE_FILENAME)
@@ -262,7 +271,7 @@ class StartSessionCog(commands.Cog):
             embed=embed, file=file, wait=True
         )
 
-        # ----- 10) ピン留めとメッセージ ID 保存 -----
+        # ----- 11) ピン留めとメッセージ ID 保存 -----
         try:
             await sent_message.pin()
         except discord.DiscordException as e:
@@ -270,7 +279,7 @@ class StartSessionCog(commands.Cog):
             logger.warning("メッセージのピン留めに失敗しました: %s", e)
         session.pinned_message_id = sent_message.id
 
-        # ----- 11) タイマー起動 (10 分前通知 + 30 分自動終了) -----
+        # ----- 12) タイマー起動 (10 分前通知 + 30 分自動終了) -----
         timeout_seconds: float = float(
             self._discord_config.session_timeout_minutes * 60
         )
