@@ -682,6 +682,45 @@ class TestPinnedMessageRefresh:
         assert len(new_embed.fields) == 1
         assert new_embed.fields[0].name is not None
         assert new_embed.fields[0].name.startswith("✅ パネル 0 (1/1)")
+        # 画像差し替え時は embed.image.url を `attachment://` で再バインドする
+        # (旧 CDN URL のままだと新 attachment が embed 外に別画像として表示される)。
+        assert new_embed.image.url == "attachment://panels.png"
+
+    def test_embed_image_rebound_to_attachment_when_image_replaced(self):
+        """本番環境では送信後に embed.image.url が Discord により CDN URL に
+        書き換えられる。その状態から attachments を差し替える際は、新 embed の
+        image.url を `attachment://panels.png` に再バインドし直さなければ、
+        新画像が embed ではなくメッセージ末尾の別添付として表示されてしまう。"""
+        cog = _make_cog()
+        task = make_task(type="level", set_value=1, value=5)  # 一発 cleared
+        SessionManager.instance().start(_make_session([task]))
+        interaction = make_mock_interaction()
+        # Discord 送信後の embed を再現: image.url は CDN URL に解決済み
+        resolved_embed = discord.Embed(
+            title="🎯 セッション開始",
+            description="- パネル数: 1\n- モザイク: なし (block=300px)",
+            color=discord.Color.blurple(),
+        )
+        resolved_embed.set_image(
+            url="https://cdn.discordapp.com/attachments/111/222/panels.png"
+        )
+        resolved_embed.set_footer(text="制限時間: 30分 | /play | /answer")
+        resolved_embed.add_field(name="⬜ パネル 0 (0/1)", value="旧お題", inline=False)
+        pinned = _attach_pinned_message(interaction, initial_embed=resolved_embed)
+
+        async def run() -> None:
+            await _invoke_play(cog, interaction)
+
+        asyncio.run(run())
+
+        pinned.edit.assert_awaited_once()
+        _, edit_kwargs = pinned.edit.call_args
+        # 新しい attachment が付き
+        assert isinstance(edit_kwargs.get("attachments"), list)
+        # 新 embed の image.url は CDN URL ではなく `attachment://panels.png` に
+        # 再バインドされている (= Discord 側で新 attachment に再解決される)
+        new_embed: discord.Embed = edit_kwargs["embed"]
+        assert new_embed.image.url == "attachment://panels.png"
 
     def test_embed_refreshed_but_image_skipped_when_no_new_clear(self):
         """進捗のみ (cleared に到達せず) では画像は再合成されず embed のみ更新される"""

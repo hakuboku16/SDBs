@@ -384,6 +384,14 @@ class InputPlayCog(commands.Cog):
                 # attachments を新しい File 1 件で上書き → 既存添付を差し替える
                 file = discord.File(composed_image, filename=_PANEL_IMAGE_FILENAME)
                 edit_kwargs["attachments"] = [file]
+                # 既存 embed の image.url は送信後に Discord 側で CDN URL に解決済み
+                # のため、attachments を差し替えるだけでは embed が削除済み
+                # attachment を指したままとなり、新画像が embed ではなく
+                # メッセージ末尾の別添付として表示されてしまう。
+                # `attachment://` スキームで再バインドし、新 attachment に
+                # 解決し直させる必要がある。
+                if new_embed is not None:
+                    new_embed.set_image(url=f"attachment://{_PANEL_IMAGE_FILENAME}")
             if not edit_kwargs:
                 # embed 不在 + 画像合成失敗の二重落ちでは更新素材がないため no-op
                 logger.warning(
