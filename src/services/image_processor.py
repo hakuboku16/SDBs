@@ -35,7 +35,8 @@ class ImageProcessor:
     """
 
     # 回転に用いる角度 (度)。`Image.rotate` は反時計回り
-    _ROTATE_CHOICES: tuple[int, ...] = (90, 180, 270)
+    # 0 を含めることで「回転オプション有効でも見た目は元のまま」というケースを許容する。
+    _ROTATE_CHOICES: tuple[int, ...] = (0, 90, 180, 270)
 
     # パネル (未クリア時の覆い) の塗り色 (RGB) と番号文字の色 (RGB)
     _PANEL_FILL_COLOR: tuple[int, int, int] = (40, 40, 40)
@@ -92,7 +93,7 @@ class ImageProcessor:
     # --------------------------------------------------
     def pick_rotation_angle(self) -> int:
         """
-        回転に用いる角度 (90 / 180 / 270 度) をランダムに 1 つ選んで返す
+        回転に用いる角度 (0 / 90 / 180 / 270 度) をランダムに 1 つ選んで返す
 
         Why: 1 セッションを通じて回転角度を固定するため、角度決定 (`pick_rotation_angle`)
         と適用 (`compose` への `rotation_angle` 引数) を分離している。呼び出し側 (cog)

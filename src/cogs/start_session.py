@@ -134,7 +134,7 @@ class StartSessionCog(commands.Cog):
     )
     @app_commands.describe(
         panels="パネル数 (4 / 9 / 16 / 25)。省略時は既定値",
-        rotate="画像をランダム回転するか (90/180/270 度)",
+        rotate="画像をランダム回転するか (0/90/180/270 度)",
         grayscale="画像をグレースケール化するか",
         mosaic="モザイクの強さ (なし / 弱 / 中 / 強 / 最強)",
     )

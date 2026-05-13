@@ -141,15 +141,15 @@ class TestApplyRotation:
         rotated = processor._apply_rotation(image, angle=90)
         assert rotated.getpixel((0, 0)) != original_top_left
 
-    def test_pick_rotation_angle_returns_only_90_180_270(
+    def test_pick_rotation_angle_returns_only_0_90_180_270(
         self, fake_repo: SongRepository
     ):
         """
-        `pick_rotation_angle` の戻り値は 90/180/270 のいずれか
-        100 回試行して 3 角度のいずれかであることを確認する。
+        `pick_rotation_angle` の戻り値は 0/90/180/270 のいずれか
+        100 回試行して 4 角度のいずれかであることを確認する。
         """
         proc = ImageProcessor(song_repository=fake_repo)
-        allowed = {90, 180, 270}
+        allowed = {0, 90, 180, 270}
         for _ in range(100):
             assert proc.pick_rotation_angle() in allowed
 
