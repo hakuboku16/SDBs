@@ -1,0 +1,447 @@
+"""
+/start スラッシュコマンドを定義するモジュール
+
+ARCHITECTURE.md ステップ 5.2 に従い、新しいセッションを開始する処理を提供します:
+
+1. 引数 (`panels` / `rotate` / `grayscale` / `mosaic`) を受け取り設定値で検証
+2. 既存セッションがあれば ephemeral で拒否 (要件: 同時 1 セッションのみ)
+3. 楽曲をランダムに 1 件選び、`TaskGenerator` で N 個のお題を生成
+4. `ImageProcessor.compose` で初期画像 (全パネル未開放) を合成
+5. チャンネルへ投稿してピン留めし、メッセージ ID を `Session.pinned_message_id` に保持
+6. `SessionManager.start` で「残り時間警告」「自動終了」用のタイマーを起動
+
+タイマー満了時の振る舞いは本モジュール内のクロージャで完結させます
+(`on_warning` でチャンネル通知 / `on_timeout` で `/end` と同等処理)。
+ステップ 5.3 で `/end` cog を実装する際にロジックを共有化することを想定しています。
+"""
+
+import logging
+import random
+from datetime import datetime, timezone
+from typing import Optional
+
+import discord
+from discord import app_commands
+from discord.ext import commands
+
+from src.cogs._helpers import (
+    EMBED_COLOR_INFO,
+    build_error_embed,
+    build_topic_field,
+    build_warning_embed,
+)
+from src.core.config import (
+    DiscordConfig,
+    SessionConfig,
+    get_assets_config,
+    get_discord_config,
+    get_session_config,
+)
+from src.services.image_processor import ImageProcessor
+from src.services.session import Session
+from src.services.session_finalizer import SessionFinalizer
+from src.services.session_manager import SessionManager
+from src.services.song_repository import SongRepository
+from src.services.task_generator import TaskGenerator
+
+# モジュールスコープのロガー (production では `__main__` 親ロガーから propagate)
+logger = logging.getLogger(__name__)
+
+
+# ==================================================
+# 静的選択肢 (app_commands.choices はリテラルでなければならないため module 定数で保持)
+# ==================================================
+# パネル数: SessionConfig.allowed_panel_counts と同期 (両方を変更する必要あり)
+_PANEL_CHOICES: list[app_commands.Choice[int]] = [
+    app_commands.Choice(name="4", value=4),
+    app_commands.Choice(name="9", value=9),
+    app_commands.Choice(name="16", value=16),
+    app_commands.Choice(name="25", value=25),
+]
+# モザイクラベル: SessionConfig.mosaic_levels のキーと同期
+_MOSAIC_CHOICES: list[app_commands.Choice[str]] = [
+    app_commands.Choice(name="なし", value="なし"),
+    app_commands.Choice(name="弱", value="弱"),
+    app_commands.Choice(name="中", value="中"),
+    app_commands.Choice(name="強", value="強"),
+    app_commands.Choice(name="最強", value="最強"),
+]
+
+# 添付画像のファイル名 (ピン留めメッセージで再利用するため固定)
+_PANEL_IMAGE_FILENAME: str = "panels.png"
+
+# 既定モザイクラベル (mosaic 引数省略時)
+_DEFAULT_MOSAIC_LABEL: str = "なし"
+
+
+# ==================================================
+# /start cog
+# ==================================================
+class StartSessionCog(commands.Cog):
+    """
+    `/start` スラッシュコマンドを提供する cog
+
+    依存はコンストラクタで注入し、テスト時は mock を差し込めるようにします。
+    `setup()` 関数が `Config` 経由で実装の依存を構築し、Bot に登録します。
+    """
+
+    def __init__(
+        self,
+        bot: commands.Bot,
+        *,
+        song_repository: SongRepository,
+        task_generator: TaskGenerator,
+        image_processor: ImageProcessor,
+        session_config: SessionConfig,
+        discord_config: DiscordConfig,
+        session_finalizer: Optional[SessionFinalizer] = None,
+        rng: Optional[random.Random] = None,
+    ) -> None:
+        """
+        cog を初期化する
+
+        Args:
+            bot: 親 Bot インスタンス (`SDBsBot` を想定)
+            song_repository: 楽曲リポジトリ (ランダム選択 / 画像パス解決に使用)
+            task_generator: タスクジェネレータ (お題のランダム生成に使用)
+            image_processor: 画像プロセッサ (初期画像合成 / 終了時の最終画像合成)
+            session_config: セッション設定 (許容パネル数 / モザイクレベル)
+            discord_config: Discord 設定 (タイマー秒数の算出に使用)
+            session_finalizer: セッション終了処理 (`/end` と自動終了で共通)。
+                省略時は ``image_processor`` を使った既定インスタンスを生成する。
+            rng: 楽曲のランダム選択に用いる乱数生成器。テスト時に固定 seed を渡せます
+        """
+        super().__init__()
+        self.bot: commands.Bot = bot
+        self._song_repository: SongRepository = song_repository
+        self._task_generator: TaskGenerator = task_generator
+        self._image_processor: ImageProcessor = image_processor
+        self._session_config: SessionConfig = session_config
+        self._discord_config: DiscordConfig = discord_config
+        self._session_finalizer: SessionFinalizer = (
+            session_finalizer
+            if session_finalizer is not None
+            else SessionFinalizer(image_processor=image_processor)
+        )
+        self._rng: random.Random = rng if rng is not None else random.Random()
+
+    # --------------------------------------------------
+    # スラッシュコマンド本体
+    # --------------------------------------------------
+    @app_commands.command(
+        name="start",
+        description="新しいセッションを開始します",
+    )
+    @app_commands.describe(
+        panels="パネル数 (4 / 9 / 16 / 25)。省略時は既定値",
+        rotate="画像をランダム回転するか (0/90/180/270 度)",
+        grayscale="画像をグレースケール化するか",
+        mosaic="モザイクの強さ (なし / 弱 / 中 / 強 / 最強)",
+    )
+    # `app_commands.choices` は単一の ChoiceT に束縛されるため、
+    # int (panels) と str (mosaic) でデコレータを分けて適用する。
+    @app_commands.choices(panels=_PANEL_CHOICES)
+    @app_commands.choices(mosaic=_MOSAIC_CHOICES)
+    async def start(
+        self,
+        interaction: discord.Interaction,
+        panels: Optional[app_commands.Choice[int]] = None,
+        rotate: bool = False,
+        grayscale: bool = False,
+        mosaic: Optional[app_commands.Choice[str]] = None,
+    ) -> None:
+        """
+        新しいセッションを開始する
+
+        早期失敗するパス (引数バリデーション / 既存セッション拒否) は `defer()` 前に
+        ephemeral で応答し、画像合成を伴う成功パスは `defer()` で公開応答に切り替えます。
+        """
+        # ----- 1) 引数解決と検証 -----
+        panel_count: int = (
+            panels.value
+            if panels is not None
+            else self._session_config.default_panel_count
+        )
+        mosaic_label: str = (
+            mosaic.value if mosaic is not None else _DEFAULT_MOSAIC_LABEL
+        )
+
+        if panel_count not in self._session_config.allowed_panel_counts:
+            await interaction.response.send_message(
+                embed=build_error_embed(f"許可されていないパネル数です: {panel_count}"),
+                ephemeral=True,
+            )
+            return
+        if mosaic_label not in self._session_config.mosaic_levels:
+            await interaction.response.send_message(
+                embed=build_error_embed(f"未知のモザイクラベルです: {mosaic_label}"),
+                ephemeral=True,
+            )
+            return
+        mosaic_block: int = self._session_config.mosaic_levels[mosaic_label]
+
+        # ----- 2) 既存セッションがあれば拒否 -----
+        manager: SessionManager = SessionManager.instance()
+        if manager.is_active():
+            await interaction.response.send_message(
+                embed=build_error_embed(
+                    "既に進行中のセッションがあります。/end か /reset で終了してから再度開始してください。"
+                ),
+                ephemeral=True,
+            )
+            return
+
+        # ----- 3) チャンネル検証 -----
+        # interaction.channel は CategoryChannel / ForumChannel (非 Messageable) も含む
+        # union 型のため、Messageable へナローして以降の send / fetch を型安全にする。
+        channel = interaction.channel
+        if interaction.channel_id is None or channel is None:
+            await interaction.response.send_message(
+                embed=build_error_embed("チャンネル外では実行できません。"),
+                ephemeral=True,
+            )
+            return
+        if not isinstance(channel, discord.abc.Messageable):
+            await interaction.response.send_message(
+                embed=build_error_embed(
+                    "メッセージを送信できないチャンネルでは実行できません。"
+                ),
+                ephemeral=True,
+            )
+            return
+
+        # ----- 4) defer (画像合成中に 3 秒制限を超える可能性に備える) -----
+        await interaction.response.defer()
+
+        # ----- 5) 楽曲ランダム選択 -----
+        songs = self._song_repository.all()
+        if not songs:
+            await interaction.followup.send(
+                embed=build_error_embed(
+                    "楽曲データが空です。assets/data/all_songs.json を確認してください。"
+                ),
+                ephemeral=True,
+            )
+            return
+        chosen = self._rng.choice(songs)
+
+        # ----- 6) タスク生成 -----
+        tasks = self._task_generator.generate(panel_count)
+
+        # ----- 7) 回転角度の決定 (セッションを通して固定) -----
+        # Why: `compose` は 3 箇所 (start / play / end) から独立に呼ばれる。以前は
+        # bool フラグでランダム選択していたため、再合成のたびに角度が変動していた。
+        # 角度を 1 度だけ決めて `Session.rotation_angle` に保存し以降は再利用する。
+        rotation_angle: Optional[int] = (
+            self._image_processor.pick_rotation_angle() if rotate else None
+        )
+
+        # ----- 8) 初期画像合成 (全パネル未開放) -----
+        image_buffer = self._image_processor.compose(
+            song_name=chosen.name,
+            panel_count=panel_count,
+            cleared_indices=set(),
+            rotation_angle=rotation_angle,
+            grayscale=grayscale,
+            mosaic_block=mosaic_block,
+        )
+
+        # ----- 9) Session 構築 -----
+        session: Session = Session(
+            song_name=chosen.name,
+            panel_count=panel_count,
+            tasks=tasks,
+            channel_id=interaction.channel_id,
+            owner_id=interaction.user.id,
+            started_at=datetime.now(timezone.utc),
+            rotate=rotate,
+            rotation_angle=rotation_angle,
+            grayscale=grayscale,
+            mosaic_block=mosaic_block,
+        )
+
+        # ----- 10) メッセージ投稿 (タスク一覧 + パネル画像) -----
+        # Bot からの送信は embed 統一の方針 (要件: メッセージはすべて embed 形式)。
+        # 画像は同送する `discord.File` を embed.image に attachment スキームで参照させる。
+        file = discord.File(image_buffer, filename=_PANEL_IMAGE_FILENAME)
+        embed = self._build_initial_embed(session, mosaic_label)
+        embed.set_image(url=f"attachment://{_PANEL_IMAGE_FILENAME}")
+        # wait=True で送信完了 Message を取得しピン留め対象にする
+        sent_message = await interaction.followup.send(
+            embed=embed, file=file, wait=True
+        )
+
+        # ----- 11) ピン留めとメッセージ ID 保存 -----
+        try:
+            await sent_message.pin()
+        except discord.DiscordException as e:
+            # ピン留め権限が無い等のケースでも投稿自体は成功させる (要件: 握りつぶさず警告)
+            logger.warning("メッセージのピン留めに失敗しました: %s", e)
+        session.pinned_message_id = sent_message.id
+
+        # ----- 12) タイマー起動 (10 分前通知 + 30 分自動終了) -----
+        timeout_seconds: float = float(
+            self._discord_config.session_timeout_minutes * 60
+        )
+        warning_seconds: float = float(
+            (
+                self._discord_config.session_timeout_minutes
+                - self._discord_config.warning_minutes_before_end
+            )
+            * 60
+        )
+
+        async def on_warning() -> None:
+            """`SessionManager` から呼ばれる残り時間警告コールバック"""
+            await self._notify_warning(channel)
+
+        async def on_timeout() -> None:
+            """`SessionManager` から呼ばれる自動終了コールバック (`/end` 同等処理)"""
+            await self._finalize_session(session, channel)
+
+        manager.start(
+            session,
+            on_warning=on_warning,
+            on_timeout=on_timeout,
+            warning_delay_seconds=warning_seconds,
+            timeout_delay_seconds=timeout_seconds,
+        )
+
+    # --------------------------------------------------
+    # 内部ヘルパー
+    # --------------------------------------------------
+    def _build_initial_embed(
+        self, session: Session, mosaic_label: str
+    ) -> discord.Embed:
+        """
+        セッション開始時にチャンネルへ投稿する embed を組み立てる
+
+        embed は画像を `set_image` で添付するため、設定値 (パネル数 / モザイク / 回転 /
+        グレースケール) を description にまとめ、お題は 1 件 1 field で並べます。
+        各 field の name / value 整形は `build_topic_field` に集約しています。
+
+        footer には制限時間 (config 由来) と /play / /answer の使用方法を表示します。
+
+        Args:
+            session: 開始するセッション
+            mosaic_label: 画像合成に使ったモザイクラベル (本文表示用)
+
+        Returns:
+            タスク一覧と設定値を含む `discord.Embed` (色は info)
+        """
+        description: str = (
+            f"- パネル数: {session.panel_count}\n"
+            f"- モザイク: {mosaic_label} (block={session.mosaic_block}px)\n"
+            f"- 回転: {'有効' if session.rotate else '無効'}"
+            f" / グレースケール: {'有効' if session.grayscale else '無効'}"
+        )
+        embed = discord.Embed(
+            title="🎯 セッション開始",
+            description=description,
+            color=EMBED_COLOR_INFO,
+        )
+        for index, task in enumerate(session.tasks):
+            name, value = build_topic_field(index, task)
+            embed.add_field(name=name, value=value, inline=False)
+        timeout_minutes: int = self._discord_config.session_timeout_minutes
+        embed.set_footer(
+            text=(
+                f"制限時間: {timeout_minutes}分 | "
+                "/play でプレイ情報を送信 | /answer で回答"
+            )
+        )
+        return embed
+
+    async def _notify_warning(self, channel: discord.abc.Messageable) -> None:
+        """
+        残り時間警告 (規定: 10 分前) をセッションチャンネルへ送信する
+
+        Bot からの送信は embed 統一の方針のため、warning embed (orange) を組み立てて送る。
+        """
+        minutes: int = self._discord_config.warning_minutes_before_end
+        embed = build_warning_embed(
+            (
+                f"セッションの制限時間まで残り{minutes}分です！\n"
+                "まだ回答していない方はお早めに！"
+            ),
+            title=f"⏰ 残り時間: {minutes}分",
+        )
+        try:
+            await channel.send(embed=embed)
+        except discord.DiscordException as e:
+            # チャンネル削除等で送信不能でも残り処理 (timeout 等) を妨げない
+            logger.warning("残り時間警告の送信に失敗しました: %s", e)
+
+    async def _notify_timeout(self, channel: discord.abc.Messageable) -> None:
+        """
+        セッション制限時間到達をセッションチャンネルへ告知する
+
+        結果は `SessionFinalizer` 経由で結果チャンネル (別チャンネル) に送られるため、
+        セッションチャンネル側では「終了したこと」「結果が別チャンネルに行く」だけを案内する。
+        """
+        embed = build_warning_embed(
+            (
+                "セッションの制限時間が終了しました！\n"
+                "結果は別チャンネルに送信されます。"
+            ),
+            title="⏱️ 制限時間終了",
+        )
+        try:
+            await channel.send(embed=embed)
+        except discord.DiscordException as e:
+            # チャンネル削除等で送信不能でも finalize 処理を妨げない
+            logger.warning("制限時間終了通知の送信に失敗しました: %s", e)
+
+    async def _finalize_session(
+        self,
+        session: Session,
+        channel: discord.abc.Messageable,
+    ) -> None:
+        """
+        セッション制限時間到達時の自動終了処理 (`/end` と同等)
+
+        セッションチャンネルへ「制限時間終了」embed を投稿してから、
+        `SessionFinalizer.finalize` に結果通知・ピン解除・セッション破棄を委譲します
+        (手動 /end と共通化)。``summary`` には時間切れである旨を含めて区別します。
+        既に手動 `/end` 等で終了済みの場合は通知を抑止し、finalizer も no-op となります。
+        """
+        if SessionManager.instance().is_active():
+            await self._notify_timeout(channel)
+        notifier = getattr(self.bot, "notifier", None)
+        await self._session_finalizer.finalize(
+            session,
+            channel,
+            notifier,
+            summary="セッション終了 (時間切れ)",
+        )
+
+
+# ==================================================
+# extension エントリポイント
+# ==================================================
+async def setup(bot: commands.Bot) -> None:
+    """
+    `Bot.load_extension` から呼ばれる cog 登録関数
+
+    実行時の依存 (リポジトリ / ジェネレータ / プロセッサ / 設定) を構築して cog に注入します。
+    """
+    assets = get_assets_config()
+    song_repository = SongRepository(
+        songs_json=assets.songs_json,
+        images_dir=assets.images_dir,
+    )
+    task_generator = TaskGenerator(
+        topics_json=assets.topics_json,
+        song_repository=song_repository,
+    )
+    image_processor = ImageProcessor(song_repository=song_repository)
+
+    cog = StartSessionCog(
+        bot,
+        song_repository=song_repository,
+        task_generator=task_generator,
+        image_processor=image_processor,
+        session_config=get_session_config(),
+        discord_config=get_discord_config(),
+    )
+    await bot.add_cog(cog)

@@ -19,3 +19,30 @@ logger:
   log_file: "python.log"
   max_bytes: 10485760  # 10MB
   backup_count: 5
+
+
+# Discord Bot 関連の設定
+# log_channel_id / result_channel_id は .env で管理 (LOG_CHANNEL_ID / RESULT_CHANNEL_ID)
+discord:
+  command_sync_guilds: []     # 開発時のみ即時反映用に Guild ID を入れる。本番は空でグローバル登録
+  session_timeout_minutes: 30
+  warning_minutes_before_end: 10
+
+
+# セッション・ゲーム進行関連の設定
+session:
+  default_panel_count: 9
+  allowed_panel_counts: [4, 9, 16, 25]
+  mosaic_levels:              # ラベル → block 画素数（小さいほど強くかかる）
+    "なし": 300
+    "弱": 150
+    "中": 90
+    "強": 45
+    "最強": 27
+
+
+# 素材ファイルのパス
+assets:
+  songs_json: "assets/data/all_songs.json"
+  topics_json: "assets/data/all_topics.json"
+  images_dir: "assets/images"

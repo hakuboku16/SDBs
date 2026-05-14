@@ -5,12 +5,45 @@ pytest の設定ファイル
 """
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 import yaml
 
 from src.core.config import Config, set_environment
+from src.services.task import PlayQuality, Task
+
+
+# ==================================================
+# テスト用 Task ファクトリ
+# ==================================================
+def make_task(
+    *,
+    type: str,
+    set_value: int,
+    value: Any = None,
+    play_quality: PlayQuality = "プレイ",
+    description_template: str = "",
+    current: int = 0,
+    cleared: bool = False,
+) -> Task:
+    """
+    テスト用に `Task` を簡潔に生成するファクトリ関数
+
+    新規追加された ``play_quality`` / ``description_template`` にデフォルト値を
+    与え、既存テストを最小変更で動かせるようにします。AC/FC のような
+    play_quality 関連テストでは明示的に上書きしてください。
+    """
+    return Task(
+        type=type,
+        set_value=set_value,
+        value=value,
+        play_quality=play_quality,
+        description_template=description_template,
+        current=current,
+        cleared=cleared,
+    )
 
 
 # ==================================================

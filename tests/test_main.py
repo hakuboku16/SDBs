@@ -1,7 +1,9 @@
 """
 main.py のユニットテスト
 
-ensure_env_loaded(), get_environment(), main() の基本的な動作を検証します。
+ensure_env_loaded(), get_environment(), get_discord_token(), main() の
+基本的な動作を検証します。Bot.run は実際にネットワーク接続が走るため
+すべて mock で置き換えます。
 """
 
 import sys
@@ -91,34 +93,175 @@ class TestGetEnvironment:
         assert main_module.get_environment() == "development"
 
 
+class TestGetDiscordToken:
+    """
+    get_discord_token() のテスト
+    """
+
+    @patch("src.main.ensure_env_loaded")
+    @patch.dict("os.environ", {"DISCORD_TOKEN": "abc123"}, clear=True)
+    def test_returns_token(self, mock_ensure_env_loaded):
+        """
+        DISCORD_TOKEN が設定されていればその値が返る
+        """
+        assert main_module.get_discord_token() == "abc123"
+
+    @patch("src.main.ensure_env_loaded")
+    @patch.dict("os.environ", {"DISCORD_TOKEN": "  abc123  "}, clear=True)
+    def test_strips_whitespace(self, mock_ensure_env_loaded):
+        """
+        前後の空白は除去される
+        """
+        assert main_module.get_discord_token() == "abc123"
+
+    @patch("src.main.ensure_env_loaded")
+    @patch.dict("os.environ", {}, clear=True)
+    def test_raises_when_unset(self, mock_ensure_env_loaded):
+        """
+        未設定なら RuntimeError が送出される
+        """
+        with pytest.raises(RuntimeError, match="DISCORD_TOKEN"):
+            main_module.get_discord_token()
+
+    @patch("src.main.ensure_env_loaded")
+    @patch.dict("os.environ", {"DISCORD_TOKEN": "   "}, clear=True)
+    def test_raises_when_blank(self, mock_ensure_env_loaded):
+        """
+        空白のみでも未設定として扱う
+        """
+        with pytest.raises(RuntimeError, match="DISCORD_TOKEN"):
+            main_module.get_discord_token()
+
+
 class TestMainFunction:
     """
     main() 関数の振る舞いを検証
+
+    Bot.run はネットワーク I/O を伴うためすべて mock 経由で呼び出されることを確認します。
     """
 
-    @patch("src.main.get_environment")
-    @patch("src.main.set_environment")
-    @patch("src.main.get_config")
-    @patch("src.main.setup_logger")
-    def test_main_happy_path(
-        self, mock_setup_logger, mock_get_config, mock_set_env, mock_get_env
-    ):
+    def _patch_common(self):
         """
-        何も問題がなければ各ヘルパーが呼び出されログが記録される
+        main() 内部で呼ばれる依存関係をまとめてパッチするコンテキスト
         """
-        mock_get_env.return_value = "test"
+        return [
+            patch("src.main.get_environment", return_value="test"),
+            patch("src.main.set_environment"),
+            patch("src.main.get_config"),
+            patch("src.main.get_discord_config"),
+            patch("src.main.setup_logger"),
+            patch("src.main.SDBsBot"),
+        ]
+
+    def test_main_happy_path_runs_bot_with_token(self):
+        """
+        正常系: SDBsBot がインスタンス化され `bot.run(token)` が呼ばれる
+        """
         fake_config = MagicMock()
         fake_config.raw_config = {"project_name": "template", "version": "1.0"}
-        mock_get_config.return_value = fake_config
         fake_logger = MagicMock()
-        mock_setup_logger.return_value = fake_logger
+        fake_discord_config = MagicMock()
+        fake_bot = MagicMock()
 
-        main_module.main()
+        with patch("src.main.get_environment", return_value="test") as mock_get_env, patch(
+            "src.main.set_environment"
+        ) as mock_set_env, patch(
+            "src.main.get_config", return_value=fake_config
+        ) as mock_get_config, patch(
+            "src.main.get_discord_config", return_value=fake_discord_config
+        ) as mock_get_discord_config, patch(
+            "src.main.setup_logger", return_value=fake_logger
+        ) as mock_setup_logger, patch(
+            "src.main.get_discord_token", return_value="token-xyz"
+        ) as mock_get_token, patch(
+            "src.main.SDBsBot", return_value=fake_bot
+        ) as mock_bot_cls:
 
+            main_module.main()
+
+        # 環境ロード・設定取得・ロガー初期化が実施される
         mock_get_env.assert_called_once()
         mock_set_env.assert_called_once_with("test")
         mock_get_config.assert_called_once()
         mock_setup_logger.assert_called_once()
+        mock_get_token.assert_called_once()
+        mock_get_discord_config.assert_called_once()
 
-        fake_logger.info.assert_any_call("処理を開始します")
-        fake_logger.info.assert_any_call("処理を終了します")
+        # SDBsBot に DiscordConfig が渡されインスタンス化される
+        mock_bot_cls.assert_called_once_with(fake_discord_config)
+        # bot.run はトークンを渡して 1 回だけ呼ばれる
+        fake_bot.run.assert_called_once_with("token-xyz")
+
+        # 起動・終了ログが出る
+        fake_logger.info.assert_any_call("Bot を起動します")
+        fake_logger.info.assert_any_call("Bot を終了します")
+
+    def test_main_exits_when_token_missing(self):
+        """
+        DISCORD_TOKEN 未設定なら SystemExit(1) で終了し、Bot は起動されない
+        """
+        fake_config = MagicMock()
+        fake_config.raw_config = {"project_name": "template", "version": "1.0"}
+        fake_logger = MagicMock()
+        fake_bot = MagicMock()
+
+        with patch("src.main.get_environment", return_value="test"), patch(
+            "src.main.set_environment"
+        ), patch("src.main.get_config", return_value=fake_config), patch(
+            "src.main.get_discord_config"
+        ) as mock_get_discord_config, patch(
+            "src.main.setup_logger", return_value=fake_logger
+        ), patch(
+            "src.main.get_discord_token",
+            side_effect=RuntimeError("DISCORD_TOKEN が未設定"),
+        ), patch(
+            "src.main.SDBsBot", return_value=fake_bot
+        ) as mock_bot_cls:
+
+            with pytest.raises(SystemExit) as exc_info:
+                main_module.main()
+
+        # 終了コード 1 で SystemExit
+        assert exc_info.value.code == 1
+
+        # Bot は構築されず run も呼ばれない
+        mock_bot_cls.assert_not_called()
+        fake_bot.run.assert_not_called()
+        mock_get_discord_config.assert_not_called()
+
+        # エラー内容がロガーに残る
+        assert any(
+            "DISCORD_TOKEN" in str(call_args)
+            for call_args in fake_logger.error.call_args_list
+        )
+
+    def test_main_logs_and_reraises_when_bot_run_fails(self):
+        """
+        bot.run() が例外を投げた場合、ロガーへ出力した上で例外を再送出する
+        (例外は握りつぶさない)
+        """
+        fake_config = MagicMock()
+        fake_config.raw_config = {"project_name": "template", "version": "1.0"}
+        fake_logger = MagicMock()
+        fake_bot = MagicMock()
+        fake_bot.run.side_effect = RuntimeError("Bot 起動失敗")
+
+        with patch("src.main.get_environment", return_value="test"), patch(
+            "src.main.set_environment"
+        ), patch("src.main.get_config", return_value=fake_config), patch(
+            "src.main.get_discord_config"
+        ), patch(
+            "src.main.setup_logger", return_value=fake_logger
+        ), patch(
+            "src.main.get_discord_token", return_value="token-xyz"
+        ), patch(
+            "src.main.SDBsBot", return_value=fake_bot
+        ):
+
+            with pytest.raises(RuntimeError, match="Bot 起動失敗"):
+                main_module.main()
+
+        # 終了ログは finally で出る
+        fake_logger.info.assert_any_call("Bot を終了します")
+        # エラーがロガーに出力される
+        assert fake_logger.error.called
