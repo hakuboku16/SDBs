@@ -146,8 +146,8 @@ class TestBuildTopicField:
             description_template="Lv.valueの譜面を持つ楽曲をset回play",
         )
         name, value = build_topic_field(0, task)
-        # symbol + 0-origin index + (current/set)
-        assert name == f"{TOPIC_NOT_CLEARED_SYMBOL} パネル 0 (1/3)"
+        # symbol + 1-origin index + (current/set)
+        assert name == f"{TOPIC_NOT_CLEARED_SYMBOL} パネル 1 (1/3)"
         # value は format_description (placeholder 置換済)
         assert value == "Lv.5の譜面を持つ楽曲を3回プレイ"
 
@@ -164,7 +164,7 @@ class TestBuildTopicField:
         name, _ = build_topic_field(2, task)
         # 既に cleared で初期化されている
         assert task.cleared is True
-        assert name == f"{TOPIC_CLEARED_SYMBOL} パネル 2 (1/1)"
+        assert name == f"{TOPIC_CLEARED_SYMBOL} パネル 3 (1/1)"
 
     def test_field_value_truncated_when_too_long(self):
         """value が 1024 文字を超えるテンプレートは末尾を省略マーカーで切り詰める"""

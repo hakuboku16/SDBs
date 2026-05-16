@@ -159,7 +159,7 @@ def _attach_pinned_message(
         # 既存お題 (古い current=0 状態) を field として 1 件持たせ、置換が起きることを
         # テスト側で観測できるようにする
         initial_embed.add_field(
-            name="⬜ パネル 0 (0/1)", value="旧お題説明", inline=False
+            name="⬜ パネル 1 (0/1)", value="旧お題説明", inline=False
         )
     pinned.embeds = [initial_embed]
     interaction.channel.fetch_message = AsyncMock(return_value=pinned)
@@ -543,9 +543,9 @@ class TestHappyPath:
 
         # 進捗があったタスクのみ field に列挙される (1 件 1 field)
         assert len(embed.fields) == 1
-        # 0-origin の index 0 のタスク (level=5) は進捗あり
+        # 1-origin の index 1 のタスク (level=5) は進捗あり
         assert embed.fields[0].name is not None
-        assert embed.fields[0].name.startswith("⬜ パネル 0 (1/2)")
+        assert embed.fields[0].name.startswith("⬜ パネル 1 (1/2)")
         assert embed.fields[0].value == "Lv.5の譜面を持つ楽曲を2回プレイ"
         # マッチしないタスクの description は含まれない
         all_field_text: str = "\n".join(
@@ -578,7 +578,7 @@ class TestHappyPath:
         assert len(embed.fields) == 1
         # cleared 済みのため symbol は ✅、追加の "[クリア!]" 表記は付かない
         assert embed.fields[0].name is not None
-        assert embed.fields[0].name.startswith("✅ パネル 0 (1/1)")
+        assert embed.fields[0].name.startswith("✅ パネル 1 (1/1)")
         assert "[クリア!]" not in embed.fields[0].name
 
     def test_play_info_in_description(self):
@@ -644,7 +644,7 @@ class TestHappyPath:
         embed: discord.Embed = kwargs["embed"]
         assert len(embed.fields) == 1
         assert embed.fields[0].name is not None
-        assert embed.fields[0].name.startswith("⬜ パネル 1 (1/2)")
+        assert embed.fields[0].name.startswith("⬜ パネル 2 (1/2)")
 
 
 # ==================================================
@@ -682,7 +682,7 @@ class TestPinnedMessageRefresh:
         new_embed: discord.Embed = edit_kwargs["embed"]
         assert len(new_embed.fields) == 1
         assert new_embed.fields[0].name is not None
-        assert new_embed.fields[0].name.startswith("✅ パネル 0 (1/1)")
+        assert new_embed.fields[0].name.startswith("✅ パネル 1 (1/1)")
         # 画像差し替え時は embed.image.url を `attachment://` で再バインドする
         # (旧 CDN URL のままだと新 attachment が embed 外に別画像として表示される)。
         assert new_embed.image.url == "attachment://panels.png"
@@ -733,7 +733,7 @@ class TestPinnedMessageRefresh:
             url="https://cdn.discordapp.com/attachments/111/222/panels.png"
         )
         resolved_embed.set_footer(text="制限時間: 30分 | /play | /answer")
-        resolved_embed.add_field(name="⬜ パネル 0 (0/1)", value="旧お題", inline=False)
+        resolved_embed.add_field(name="⬜ パネル 1 (0/1)", value="旧お題", inline=False)
         pinned = _attach_pinned_message(interaction, initial_embed=resolved_embed)
 
         async def run() -> None:
@@ -780,7 +780,7 @@ class TestPinnedMessageRefresh:
         # fields は最新進捗 (1/3) で再構築される
         assert len(new_embed.fields) == 1
         assert new_embed.fields[0].name is not None
-        assert new_embed.fields[0].name.startswith("⬜ パネル 0 (1/3)")
+        assert new_embed.fields[0].name.startswith("⬜ パネル 1 (1/3)")
 
     def test_no_message_update_when_no_progress(self):
         """進捗 0 のプレイでは画像合成もメッセージ取得・編集も走らない"""
@@ -835,9 +835,9 @@ class TestPinnedMessageRefresh:
         # 全タスクが field として並ぶ (進捗のあったものだけではない)
         assert len(new_embed.fields) == 2
         assert new_embed.fields[0].name is not None
-        assert new_embed.fields[0].name.startswith("✅ パネル 0 (1/1)")
+        assert new_embed.fields[0].name.startswith("✅ パネル 1 (1/1)")
         assert new_embed.fields[1].name is not None
-        assert new_embed.fields[1].name.startswith("⬜ パネル 1 (0/2)")
+        assert new_embed.fields[1].name.startswith("⬜ パネル 2 (0/2)")
 
     def test_embed_metadata_preserved_after_refresh(self):
         """既存 embed の title / description / footer / color / image は保持される"""

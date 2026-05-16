@@ -206,9 +206,9 @@ def build_topic_field(index: int, task: Task) -> tuple[str, str]:
     """
     お題 1 件を embed の add_field 用 ``(name, value)`` に整形する
 
-    ``name``  : ``"{symbol} パネル {index} ({current}/{set_value})"``
+    ``name``  : ``"{symbol} パネル {index+1} ({current}/{set_value})"``
         - ``symbol`` は ``task.cleared`` で ``✅`` / ``⬜`` を切り替え
-        - ``index`` は 0-origin (パネル画像の cleared_indices と表記を揃える)
+        - ``index`` は 0-origin だが表示は 1-origin に変換 (パネル画像の番号と揃える)
     ``value`` : ``task.format_description()`` (value/set/play placeholder 置換済)
 
     `/start` `/play` `/progress` のすべてで同じ表示を使うため、フォーマット変更時は
@@ -223,7 +223,7 @@ def build_topic_field(index: int, task: Task) -> tuple[str, str]:
         value 1024) に収まるよう切り詰め済み。
     """
     symbol: str = TOPIC_CLEARED_SYMBOL if task.cleared else TOPIC_NOT_CLEARED_SYMBOL
-    name: str = f"{symbol} パネル {index} ({task.current}/{task.set_value})"
+    name: str = f"{symbol} パネル {index + 1} ({task.current}/{task.set_value})"
     value: str = task.format_description()
     return (
         _truncate_for_field(name, _FIELD_NAME_LIMIT),

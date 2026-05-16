@@ -511,11 +511,11 @@ class TestStartHappyPath:
 
         # 各お題は 1 件 1 field で並ぶ
         assert len(embed.fields) == 4
-        # field name には "⬜ パネル {0-origin index} (current/set)" 形式
+        # field name には "⬜ パネル {1-origin index} (current/set)" 形式
         assert embed.fields[0].name is not None
-        assert embed.fields[0].name.startswith("⬜ パネル 0 (0/3)")
+        assert embed.fields[0].name.startswith("⬜ パネル 1 (0/3)")
         assert embed.fields[1].name is not None
-        assert embed.fields[1].name.startswith("⬜ パネル 1 (0/40)")
+        assert embed.fields[1].name.startswith("⬜ パネル 2 (0/40)")
         # field value には format_description の結果が入る (placeholder 置換済)
         assert (
             embed.fields[0].value
