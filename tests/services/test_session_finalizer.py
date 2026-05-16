@@ -39,6 +39,7 @@ def _make_session(*, pinned_message_id: int | None = 12345) -> Session:
     """テスト用 Session を生成する"""
     session = Session(
         song_name="Magnolia",
+        book="Deemo Original",
         panel_count=1,
         tasks=[_make_task()],
         channel_id=999,
@@ -98,27 +99,21 @@ def reset_singleton():
 class TestFormatSpoilerSongName:
     """`format_spoiler_song_name` の振る舞い"""
 
-    def test_pads_short_name_to_min_width_inside_spoiler(self):
-        """20 文字未満は半角スペースで 20 文字まで右パディングしてスポイラーで包む"""
-        result = SessionFinalizer.format_spoiler_song_name("Magnolia")
-        assert result == "||" + "Magnolia".ljust(20) + "||"
+    def test_includes_book_in_spoiler(self):
+        """楽曲名と book 名をスポイラーで包む"""
+        result = SessionFinalizer.format_spoiler_song_name("Magnolia", "Deemo Original")
+        assert result == "||Magnolia (Deemo Original)||"
+
+    def test_works_with_long_name(self):
+        """長い楽曲名でも切り詰めずそのまま包む"""
+        long_name = "A" * 30
+        result = SessionFinalizer.format_spoiler_song_name(long_name, "SomeBook")
+        assert result == f"||{long_name} (SomeBook)||"
+
+    def test_spoiler_markers_present(self):
+        """先頭と末尾に || が付く"""
+        result = SessionFinalizer.format_spoiler_song_name("ANiMA", "Book1")
         assert result.startswith("||") and result.endswith("||")
-        # 内側の文字数は 20 (パディングが効いている)
-        assert len(result) - 4 == 20
-
-    def test_keeps_long_name_unpadded(self):
-        """20 文字以上は切り詰めずそのまま包む"""
-        long_name = "A" * 25
-        assert SessionFinalizer.format_spoiler_song_name(long_name) == f"||{long_name}||"
-
-    def test_exactly_min_width_is_not_padded(self):
-        """ちょうど 20 文字なら追加のスペースは入らない"""
-        name = "A" * 20
-        assert SessionFinalizer.format_spoiler_song_name(name) == f"||{name}||"
-
-    def test_empty_string_yields_min_width_padding(self):
-        """空文字でも 20 文字分の隠し幅を確保する"""
-        assert SessionFinalizer.format_spoiler_song_name("") == "||" + " " * 20 + "||"
 
 
 # ==================================================
@@ -145,8 +140,8 @@ class TestFinalizeHappyPath:
         # 1) 結果通知が呼ばれる
         notifier.notify_session_result.assert_awaited_once()
         kwargs = notifier.notify_session_result.await_args.kwargs
-        # 楽曲名はスポイラー記法で包まれ、20 文字未満は右パディングされて渡る
-        assert kwargs["spoiler_song_name"] == "||" + "Magnolia".ljust(20) + "||"
+        # 楽曲名は book 名と合わせてスポイラー記法で包まれて渡る
+        assert kwargs["spoiler_song_name"] == "||Magnolia (Deemo Original)||"
         # 正解者は session の set がそのまま渡る
         assert kwargs["correct_answerers"] == session.correct_answerers
         assert kwargs["summary"] == "セッション終了"

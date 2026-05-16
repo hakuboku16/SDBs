@@ -85,6 +85,7 @@ def _make_session(tasks: list[Task], *, song_name: str = "SampleSong") -> Sessio
     """`SessionManager` に登録するテスト用セッションを生成する"""
     return Session(
         song_name=song_name,
+        book="TestBook",
         panel_count=len(tasks),
         tasks=tasks,
         channel_id=2001,

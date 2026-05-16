@@ -49,6 +49,7 @@ def _make_session() -> Session:
     """SessionManager に登録するテスト用セッションを生成する"""
     return Session(
         song_name="Magnolia",
+        book="TestBook",
         panel_count=1,
         tasks=[make_task(type="level", set_value=1, value=5)],
         channel_id=2001,

@@ -74,6 +74,7 @@ def _make_session(
     """`SessionManager` に登録するテスト用セッションを生成する"""
     return Session(
         song_name=song_name,
+        book="TestBook",
         panel_count=1 if tasks is None else len(tasks),
         tasks=tasks if tasks is not None else [make_task(type="level", set_value=1, value=5)],
         channel_id=2001,

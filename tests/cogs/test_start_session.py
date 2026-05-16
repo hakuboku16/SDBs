@@ -78,6 +78,7 @@ def _make_existing_session() -> Session:
     """`SessionManager` に注入する既存セッションを生成する"""
     return Session(
         song_name="ExistingSong",
+        book="TestBook",
         panel_count=1,
         tasks=[_sample_task()],
         channel_id=999,
@@ -574,8 +575,8 @@ class TestFinalizeSession:
         _bot_mock(cog).notifier.notify_session_result.assert_awaited_once()
         kwargs = _bot_mock(cog).notifier.notify_session_result.await_args.kwargs
         assert kwargs["summary"] == "セッション終了 (時間切れ)"
-        # 楽曲名はスポイラー記法で包まれ、20 文字未満は半角スペースで右パディングされて渡る
-        assert kwargs["spoiler_song_name"] == "||" + session.song_name.ljust(20) + "||"
+        # 楽曲名は book 名と合わせてスポイラー記法で包まれて渡る
+        assert kwargs["spoiler_song_name"] == f"||{session.song_name} ({session.book})||"
         # 3) ピン解除が呼ばれた
         channel.fetch_message.assert_awaited_once_with(42_42_42)
         pinned_msg.unpin.assert_awaited_once()
