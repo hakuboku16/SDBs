@@ -74,6 +74,7 @@ class Session:
 
     Attributes:
         song_name: 正解 (パネルに隠した楽曲) の楽曲名
+        book: 楽曲が属する book 名 (JSON の shelf/book 階層に対応)
         panel_count: パネル枚数 (4 / 9 / 16 / 25 のいずれか)
         tasks: TaskGenerator が生成した N 個のお題
         channel_id: セッションを開始した Discord チャンネル ID
@@ -99,6 +100,7 @@ class Session:
     """
 
     song_name: str
+    book: str
     panel_count: int
     tasks: list[Task]
     channel_id: int

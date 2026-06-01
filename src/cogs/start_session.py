@@ -249,6 +249,7 @@ class StartSessionCog(commands.Cog):
         # ----- 9) Session 構築 -----
         session: Session = Session(
             song_name=chosen.name,
+            book=chosen.book,
             panel_count=panel_count,
             tasks=tasks,
             channel_id=interaction.channel_id,

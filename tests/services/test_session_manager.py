@@ -29,6 +29,7 @@ def _make_session(song_name: str = "Aragami") -> Session:
     tasks = [make_task(type="level", set_value=1, value=5)]
     return Session(
         song_name=song_name,
+        book="TestBook",
         panel_count=1,
         tasks=tasks,
         channel_id=111,

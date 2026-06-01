@@ -2,8 +2,8 @@
 # 開発環境 (本番、開発、テスト) で異なる変数は、それぞれの設定ファイル(.yaml)で処理する
 
 
-project_name: "template"
-version: "1.0.0"
+project_name: "SDBs"
+version: "1.1.0"
 
 
 # src/core/logger.py

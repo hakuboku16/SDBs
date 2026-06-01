@@ -35,6 +35,7 @@ def _make_session(
         tasks = [_make_task() for _ in range(panel_count)]
     return Session(
         song_name="Aragami",
+        book="TestBook",
         panel_count=panel_count,
         tasks=tasks,
         channel_id=111,
@@ -116,6 +117,7 @@ class TestSessionInit:
         """
         session = Session(
             song_name="Aragami",
+            book="TestBook",
             panel_count=4,
             tasks=[_make_task() for _ in range(4)],
             channel_id=111,

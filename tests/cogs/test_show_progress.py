@@ -44,6 +44,7 @@ def _make_session(tasks: list[Task]) -> Session:
     """SessionManager に登録するテスト用セッションを生成する"""
     return Session(
         song_name="Magnolia",
+        book="TestBook",
         panel_count=len(tasks),
         tasks=tasks,
         channel_id=2001,
@@ -157,19 +158,19 @@ class TestProgressHappyPath:
         assert "📊" in embed.title
         assert "1/3" in embed.title
 
-        # 各タスクは 1 件 1 field で並ぶ (0-origin の index)
+        # 各タスクは 1 件 1 field で並ぶ (1-origin の index)
         assert len(embed.fields) == 3
-        # cleared タスク: ✅ + 0-origin index 0 + (1/1) + 整形済み description
-        assert embed.fields[0].name == "✅ パネル 0 (1/1)"
+        # cleared タスク: ✅ + 1-origin index 1 + (1/1) + 整形済み description
+        assert embed.fields[0].name == "✅ パネル 1 (1/1)"
         assert embed.fields[0].value == "Lv.5の譜面を持つ楽曲を1回プレイ"
         # 未 cleared タスク (value list, AC quality)
-        assert embed.fields[1].name == "⬜ パネル 1 (1/3)"
+        assert embed.fields[1].name == "⬜ パネル 2 (1/3)"
         assert (
             embed.fields[1].value
             == "楽曲名に(a, b)のすべてが含まれる楽曲を3回AC"
         )
         # 未 cleared タスク (value None / 累積系)
-        assert embed.fields[2].name == "⬜ パネル 2 (20/100)"
+        assert embed.fields[2].name == "⬜ パネル 3 (20/100)"
         assert embed.fields[2].value == "プレイした譜面のレベルの合計が100"
 
     def test_all_cleared_tasks_use_cleared_symbol(self):

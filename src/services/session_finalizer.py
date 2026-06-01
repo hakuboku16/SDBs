@@ -97,7 +97,7 @@ class SessionFinalizer:
         elif final_image is not None:
             await notifier.notify_session_result(
                 image=final_image,
-                spoiler_song_name=self.format_spoiler_song_name(session.song_name),
+                spoiler_song_name=self.format_spoiler_song_name(session.song_name, session.book),
                 correct_answerers=session.correct_answerers,
                 summary=summary,
             )
@@ -148,19 +148,11 @@ class SessionFinalizer:
                 "ピン解除に失敗しました (message_id=%s): %s", message_id, e
             )
 
-    # 結果通知でのスポイラー最小幅 (短い楽曲名でも一定の隠し幅を確保するため)
-    _SPOILER_MIN_WIDTH: int = 20
-
     @staticmethod
-    def format_spoiler_song_name(name: str) -> str:
+    def format_spoiler_song_name(name: str, book: str) -> str:
         """
-        楽曲名を Discord スポイラー形式で包む
+        楽曲名と book 名を Discord スポイラー形式で包む
 
-        例: "Magnolia" -> "||Magnolia            ||" (内側を半角スペースで 20 文字まで右パディング)
-
-        Why: スポイラーの隠し幅は内側の文字数で決まる。短い名前ほど黒帯が短くなり
-        文字数が暗示されてしまうので、`_SPOILER_MIN_WIDTH` 文字までスペース埋めして
-        最低幅を確保する。20 文字超の楽曲名はそのまま包む (切り詰めない)。
+        例: "Magnolia", "Deemo Original" -> "||Magnolia (Deemo Original)||"
         """
-        padded: str = name.ljust(SessionFinalizer._SPOILER_MIN_WIDTH)
-        return f"||{padded}||"
+        return f"||{name} ({book})||"
