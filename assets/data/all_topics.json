@@ -1,0 +1,371 @@
+[
+    {
+        "type": "title_include",
+        "description": "楽曲名にvalueのすべてが含まれる楽曲をset回play",
+        "example": "(a, b, c)：「Miracle of Daybreak」",
+        "set": [
+            2,
+            4,
+            1
+        ],
+        "value": {
+            "candidate": "abcdefghijklmnopqrstuvwxyz",
+            "choice": 2
+        }
+    },
+    {
+        "type": "title_startswith",
+        "description": "楽曲名がvalueのいずれかで始まる楽曲をset回play",
+        "example": "(a, b)：「ANiMA」",
+        "set": [
+            2,
+            4,
+            1
+        ],
+        "value": {
+            "candidate": "abcdefghijklmnopqrstuvwxy",
+            "choice": 2
+        }
+    },
+    {
+        "type": "title_endswith",
+        "description": "楽曲名がvalueのいずれかで終わる楽曲をset回play",
+        "example": "(a, b)：「Saika」",
+        "set": [
+            1,
+            3,
+            1
+        ],
+        "value": {
+            "candidate": "acdefghiklmnoprstuvwxyz",
+            "choice": 2
+        }
+    },
+    {
+        "type": "title_len_below",
+        "description": "楽曲名がvalue文字以下の曲をset回play",
+        "example": "3文字以下：「Aya」",
+        "set": [
+            2,
+            4,
+            1
+        ],
+        "value": {
+            "range": [
+                3,
+                7,
+                1
+            ]
+        }
+    },
+    {
+        "type": "title_len_above",
+        "description": "楽曲名がvalue文字以上の曲をset回play",
+        "example": "21文字以上：「Reverse - Parallel Universe」",
+        "set": [
+            2,
+            4,
+            1
+        ],
+        "value": {
+            "range": [
+                17,
+                26,
+                1
+            ]
+        }
+    },
+    {
+        "type": "title_blank",
+        "description": "value個の空白文字を含む曲名をset回play",
+        "example": "2個：「Quimi (DEEMO Edit)」",
+        "set": [
+            2,
+            4,
+            1
+        ],
+        "value": {
+            "range": [
+                0,
+                5,
+                1
+            ]
+        }
+    },
+    {
+        "type": "difficult",
+        "description": "難易度valueでset回play",
+        "example": "(補足)Etudeパックのみ難易度Normalが存在しない",
+        "set": [
+            3,
+            5,
+            1
+        ],
+        "value": {
+            "candidate": [
+                "Easy",
+                "Normal",
+                "Hard"
+            ],
+            "choice": 1
+        }
+    },
+    {
+        "type": "level",
+        "description": "Lv.valueの譜面を持つ楽曲をset回play",
+        "example": "Lv.2: 「Undo」",
+        "set": [
+            3,
+            5,
+            1
+        ],
+        "value": {
+            "range": [
+                1,
+                12,
+                1
+            ]
+        }
+    },
+    {
+        "type": "level_total",
+        "description": "playした譜面のレベルの合計がset",
+        "example": "(補足)Ex譜面のうち英語、2進数表記のものは除く",
+        "set": [
+            30,
+            50,
+            10
+        ],
+        "value": null
+    },
+    {
+        "type": "result_charming_total",
+        "description": "playしたリザルトのcharmingの合計がset",
+        "example": "(補足)楽曲のnotes数ではなくリザルト画面のcharming数",
+        "set": [
+            3000,
+            6000,
+            1000
+        ],
+        "value": null
+    },
+    {
+        "type": "result_combo_total",
+        "description": "playしたリザルトのcomboの合計がset",
+        "example": "(補足)楽曲のnotes数ではなくリザルト画面のcombo数",
+        "set": [
+            3000,
+            6000,
+            1000
+        ],
+        "value": null
+    },
+    {
+        "type": "notes_below",
+        "description": "ノーツ数がvalue以下の譜面を持つ楽曲をset回play",
+        "example": "100以下: 「Dream」",
+        "set": [
+            1,
+            3,
+            1
+        ],
+        "value": {
+            "range": [
+                100,
+                200,
+                10
+            ]
+        }
+    },
+    {
+        "type": "notes_above",
+        "description": "ノーツ数がvalue以上の譜面を持つ楽曲をset回play",
+        "example": "1600以上: 「White Rain」",
+        "set": [
+            1,
+            3,
+            1
+        ],
+        "value": {
+            "range": [
+                1100,
+                1600,
+                100
+            ]
+        }
+    },
+    {
+        "type": "notes_density_below",
+        "description": "ノーツ密度がvalue[notes/s]以下の譜面を持つ楽曲をset回play",
+        "example": "0.8notes/s以下: 「Aquamarine」",
+        "set": [
+            1,
+            3,
+            1
+        ],
+        "value": {
+            "range": [
+                0.8,
+                1.4,
+                0.1
+            ]
+        }
+    },
+    {
+        "type": "notes_density_above",
+        "description": "ノーツ密度がvalue[notes/s]以上の譜面を持つ楽曲をset回play",
+        "example": "10.0notes/s以上: 「Parodia Sonatina Var.II」",
+        "set": [
+            1,
+            3,
+            1
+        ],
+        "value": {
+            "range": [
+                8.0,
+                10.5,
+                0.5
+            ]
+        }
+    },
+    {
+        "type": "notes_endswith",
+        "description": "ノーツ数の一の位が「value」の譜面をset回play",
+        "example": "0: 「10 -ichizero-」",
+        "set": [
+            1,
+            3,
+            1
+        ],
+        "value": {
+            "candidate": "0123456789",
+            "choice": 1
+        }
+    },
+    {
+        "type": "composer_name_startswith",
+        "description": "valueのいずれかから始まるコンポーザーの楽曲をset回play",
+        "example": "(a, b): 「Sunset」",
+        "set": [
+            2,
+            4,
+            1
+        ],
+        "value": {
+            "candidate": "abcefghijklmnopqrstuvwxyz",
+            "choice": 2
+        }
+    },
+    {
+        "type": "composer_name_endswith",
+        "description": "valueのいずれかで終わるコンポーザーの楽曲をset回play",
+        "example": "(a, b): 「Hanomai」",
+        "set": [
+            1,
+            3,
+            1
+        ],
+        "value": {
+            "candidate": "abcdefghiklmnopqrstuvwxyz",
+            "choice": 2
+        }
+    },
+    {
+        "type": "composer_members",
+        "description": "コンポーザーが複数人いる楽曲をset回play",
+        "example": "「Futarimiti」",
+        "set": [
+            1,
+            3,
+            1
+        ],
+        "value": null
+    },
+    {
+        "type": "featuring",
+        "description": "フィーチャリング楽曲をset回play",
+        "example": "「Pulses」",
+        "set": [
+            1,
+            3,
+            1
+        ],
+        "value": null
+    },
+    {
+        "type": "time_below",
+        "description": "曲の長さがvalue秒以下の楽曲をset回play",
+        "example": "100秒以下: 「Rayark 7th Main Theme」",
+        "set": [
+            2,
+            4,
+            1
+        ],
+        "value": {
+            "range": [
+                100,
+                130,
+                5
+            ]
+        }
+    },
+    {
+        "type": "time_above",
+        "description": "曲の長さがvalue秒以上の楽曲をset回play",
+        "example": "240秒以上: 「Tree of Dreams」",
+        "set": [
+            2,
+            4,
+            1
+        ],
+        "value": {
+            "range": [
+                180,
+                240,
+                10
+            ]
+        }
+    },
+    {
+        "type": "version",
+        "description": "ver.valueに実装された楽曲をset回play",
+        "example": "バージョン1.0: 「Wings of piano」",
+        "set": [
+            1,
+            3,
+            1
+        ],
+        "value": {
+            "candidate": "version_list",
+            "choice": 3
+        }
+    },
+    {
+        "type": "book",
+        "description": "valueに収録されている楽曲をset回play",
+        "example": "Deemo's collection Vol.1B: 「Yawning Lion」",
+        "set": [
+            2,
+            4,
+            1
+        ],
+        "value": {
+            "candidate": "book_list",
+            "choice": 3
+        }
+    },
+    {
+        "type": "shelf",
+        "description": "value棚に収録されている楽曲をset回play",
+        "example": "Story: 「Leviathan」",
+        "set": [
+            3,
+            5,
+            1
+        ],
+        "value": {
+            "candidate": "shelf_list",
+            "choice": 1
+        }
+    }
+]
