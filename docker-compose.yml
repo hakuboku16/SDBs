@@ -1,0 +1,7 @@
+services:
+  app:
+    build: .
+    environment:
+      APP_ENV: development
+    volumes:
+      - ./logs:/app/logs
