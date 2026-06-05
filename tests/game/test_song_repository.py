@@ -59,3 +59,8 @@ def test_search_is_partial_and_case_insensitive(
 def test_search_no_match_returns_empty(song_assets: tuple[Path, Path]) -> None:
     repo = SongRepository.from_files(*song_assets)
     assert repo.search("zzzzz") == []
+
+
+def test_songs_with_image(song_assets: tuple[Path, Path]) -> None:
+    repo = SongRepository.from_files(*song_assets)
+    assert {s.title for s in repo.songs_with_image()} == {"Dream", "Futarimiti"}

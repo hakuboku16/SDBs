@@ -80,3 +80,6 @@ class SongRepository:
         # 入力ゆれを吸収するため正規化+大文字小文字無視で部分一致させる。
         needle = _normalize(query).casefold()
         return [s for s in self._songs if needle in _normalize(s.title).casefold()]
+
+    def songs_with_image(self) -> list[Song]:
+        return [s for s in self._songs if s.image_path is not None]
