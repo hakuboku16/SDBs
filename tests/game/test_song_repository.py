@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from src.game.models import Difficulty
-from src.game.song_repository import load_songs
+from src.game.song_repository import SongRepository, load_songs
 
 
 def test_load_parses_basic_fields(song_assets: tuple[Path, Path]) -> None:
@@ -46,3 +46,16 @@ def test_image_resolution(song_assets: tuple[Path, Path]) -> None:
     by_title = {s.title: s for s in load_songs(songs_path, images_dir)}
     assert by_title["Dream"].image_path == images_dir / "Dream.png"
     assert by_title["Pulses"].image_path is None
+
+
+def test_search_is_partial_and_case_insensitive(
+    song_assets: tuple[Path, Path],
+) -> None:
+    repo = SongRepository.from_files(*song_assets)
+    assert {s.title for s in repo.search("dream")} == {"Dream"}
+    assert {s.title for s in repo.search("REA")} == {"Dream"}
+
+
+def test_search_no_match_returns_empty(song_assets: tuple[Path, Path]) -> None:
+    repo = SongRepository.from_files(*song_assets)
+    assert repo.search("zzzzz") == []

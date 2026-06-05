@@ -60,3 +60,23 @@ def load_songs(songs_path: Path, images_dir: Path) -> list[Song]:
             for title, node in entries.items():
                 songs.append(_parse_song(title, book, shelf, node, image_index))
     return songs
+
+
+class SongRepository:
+    """読み込んだ楽曲群への問い合わせを提供する。"""
+
+    def __init__(self, songs: list[Song]) -> None:
+        self._songs = songs
+
+    @classmethod
+    def from_files(cls, songs_path: Path, images_dir: Path) -> SongRepository:
+        return cls(load_songs(songs_path, images_dir))
+
+    @property
+    def songs(self) -> list[Song]:
+        return list(self._songs)
+
+    def search(self, query: str) -> list[Song]:
+        # 入力ゆれを吸収するため正規化+大文字小文字無視で部分一致させる。
+        needle = _normalize(query).casefold()
+        return [s for s in self._songs if needle in _normalize(s.title).casefold()]
