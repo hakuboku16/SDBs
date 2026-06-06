@@ -64,3 +64,10 @@ def test_search_no_match_returns_empty(song_assets: tuple[Path, Path]) -> None:
 def test_songs_with_image(song_assets: tuple[Path, Path]) -> None:
     repo = SongRepository.from_files(*song_assets)
     assert {s.title for s in repo.songs_with_image()} == {"Dream", "Futarimiti"}
+
+
+def test_derived_lists(song_assets: tuple[Path, Path]) -> None:
+    repo = SongRepository.from_files(*song_assets)
+    assert repo.shelves() == ["II", "Story"]
+    assert repo.books() == ["Deemo's collection Vol.1A", "Etude"]
+    assert repo.versions() == ["1.0", "2.0", "2.3"]

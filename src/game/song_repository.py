@@ -83,3 +83,12 @@ class SongRepository:
 
     def songs_with_image(self) -> list[Song]:
         return [s for s in self._songs if s.image_path is not None]
+
+    def shelves(self) -> list[str]:
+        return sorted({s.shelf for s in self._songs})
+
+    def books(self) -> list[str]:
+        return sorted({s.book for s in self._songs})
+
+    def versions(self) -> list[str]:
+        return sorted({s.version for s in self._songs})
