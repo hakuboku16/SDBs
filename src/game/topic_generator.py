@@ -91,3 +91,30 @@ def generate_topic(
             description=description,
         )
     raise RuntimeError(f"達成可能なお題を生成できません: {template.topic_type.value}")
+
+
+def _choose_templates(
+    templates: list[TopicTemplate],
+    count: int,
+    rng: random.Random,
+) -> list[TopicTemplate]:
+    if count <= len(templates):
+        return rng.sample(templates, count)
+    # 型数を超える分は重複を許して補い、並びを混ぜる。
+    chosen = list(templates)
+    chosen += [rng.choice(templates) for _ in range(count - len(templates))]
+    rng.shuffle(chosen)
+    return chosen
+
+
+def generate_topics(
+    templates: list[TopicTemplate],
+    count: int,
+    repo: SongRepository,
+    rng: random.Random,
+) -> list[Topic]:
+    chosen = _choose_templates(templates, count, rng)
+    return [
+        generate_topic(template, panel_no=index + 1, repo=repo, rng=rng)
+        for index, template in enumerate(chosen)
+    ]

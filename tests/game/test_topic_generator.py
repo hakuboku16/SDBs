@@ -10,7 +10,7 @@ from src.game.models import (
 )
 from src.game.song_repository import SongRepository
 from src.game.topic_catalog import CandidateSpec, RangeSpec, TopicTemplate
-from src.game.topic_generator import generate_topic
+from src.game.topic_generator import generate_topic, generate_topics
 
 
 def _repo() -> SongRepository:
@@ -92,3 +92,32 @@ def test_generate_topic_sum_type() -> None:
     assert topic.progress_kind is ProgressKind.SUM
     assert topic.filter_value is None
     assert topic.required in (30, 40, 50)
+
+
+def _templates() -> list[TopicTemplate]:
+    return [
+        TopicTemplate(
+            topic_type=TopicType.LEVEL,
+            description="Lv.valueの譜面を持つ楽曲をset回play",
+            set_spec=(3, 5, 1),
+            value_spec=RangeSpec(low=1, high=9, step=1),
+        ),
+        TopicTemplate(
+            topic_type=TopicType.SHELF,
+            description="value棚に収録されている楽曲をset回play",
+            set_spec=(3, 5, 1),
+            value_spec=CandidateSpec(candidate="shelf_list", choice=1),
+        ),
+    ]
+
+
+def test_generate_topics_assigns_sequential_panels() -> None:
+    topics = generate_topics(_templates(), count=2, repo=_repo(), rng=random.Random(0))
+    assert [t.panel_no for t in topics] == [1, 2]
+    assert {t.topic_type for t in topics} == {TopicType.LEVEL, TopicType.SHELF}
+
+
+def test_generate_topics_allows_duplicates_when_count_exceeds_types() -> None:
+    topics = generate_topics(_templates(), count=5, repo=_repo(), rng=random.Random(0))
+    assert len(topics) == 5
+    assert [t.panel_no for t in topics] == [1, 2, 3, 4, 5]
