@@ -2,6 +2,7 @@ from src.game.models import (
     Chart,
     Difficulty,
     PlayCondition,
+    PlayReport,
     ProgressKind,
     Song,
     Topic,
@@ -57,3 +58,27 @@ def test_topic_progress_is_mutable() -> None:
     topic.completed = True
     assert topic.progress == 8
     assert topic.completed is True
+
+
+def test_play_report_construction() -> None:
+    song = Song(
+        title="Dream",
+        shelf="Story",
+        book="Vol.1A",
+        version="1.0",
+        charts={Difficulty.HARD: Chart(level=8, notes=485)},
+        time=133,
+        composers=("Rabpit",),
+        featuring=(),
+        image_path=None,
+    )
+    report = PlayReport(
+        song=song,
+        difficulty=Difficulty.HARD,
+        combo=485,
+        charming=400,
+    )
+    assert report.song.title == "Dream"
+    assert report.difficulty is Difficulty.HARD
+    assert report.combo == 485
+    assert report.charming == 400

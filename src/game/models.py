@@ -98,3 +98,13 @@ class Topic:
     description: str
     progress: int = 0
     completed: bool = False
+
+
+@dataclass(frozen=True)
+class PlayReport:
+    """プレイ申告 1 件。song は cog 層で解決済みの Song。照合中は不変。"""
+
+    song: Song
+    difficulty: Difficulty
+    combo: int
+    charming: int
