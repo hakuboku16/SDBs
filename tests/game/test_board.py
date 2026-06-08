@@ -1,6 +1,9 @@
+from io import BytesIO
+from pathlib import Path
+
 from PIL import Image
 
-from src.game.board import process_image
+from src.game.board import _PANEL_FILL, process_image, render_board
 from src.game.models import ImageOptions
 
 
@@ -42,3 +45,40 @@ def test_process_mosaic_creates_uniform_blocks() -> None:
     out = process_image(grad, _opts(mosaic_px=30))
     block = 300 // 30  # 10px 角のブロック
     assert out.getpixel((0, 0)) == out.getpixel((block - 1, block - 1))
+
+
+def _png_path(tmp_path: Path, img: Image.Image) -> Path:
+    path = tmp_path / "hidden.png"
+    img.save(path, format="PNG")
+    return path
+
+
+def test_render_returns_300px_png(tmp_path: Path) -> None:
+    path = _png_path(tmp_path, _half_image())
+    data = render_board(path, grid_size=3, revealed_panels=set(), options=_opts())
+    out = Image.open(BytesIO(data))
+    assert out.format == "PNG"
+    assert out.size == (300, 300)
+
+
+def test_render_covered_tile_differs_from_revealed(tmp_path: Path) -> None:
+    path = _png_path(tmp_path, _half_image())
+    covered = Image.open(
+        BytesIO(render_board(path, grid_size=2, revealed_panels=set(), options=_opts()))
+    ).convert("RGB")
+    revealed = Image.open(
+        BytesIO(render_board(path, grid_size=2, revealed_panels={1}, options=_opts()))
+    ).convert("RGB")
+    # パネル1=左上タイル(0,0)-(150,150)の中心 (40,40)。
+    assert covered.getpixel((40, 40)) != revealed.getpixel((40, 40))
+    assert revealed.getpixel((40, 40)) == (255, 0, 0)
+
+
+def test_render_reveals_correct_panel_by_number(tmp_path: Path) -> None:
+    # 2x2。パネル3=左下、パネル4=右下。下半分は青。
+    path = _png_path(tmp_path, _half_image())
+    board = Image.open(
+        BytesIO(render_board(path, grid_size=2, revealed_panels={3}, options=_opts()))
+    ).convert("RGB")
+    assert board.getpixel((40, 220)) == (0, 0, 255)   # パネル3=開示(画像の青)
+    assert board.getpixel((220, 220)) == _PANEL_FILL   # パネル4=被覆(パネル色)
