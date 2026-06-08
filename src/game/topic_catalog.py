@@ -39,6 +39,14 @@ class TopicTemplate:
 
 
 def _parse_value(raw: object) -> ValueSpec:
+    """value ノードを ValueSpec へ変換する。
+
+    Args:
+        raw: テンプレートの value 生ノード。None / range 持ち / candidate 持ちのいずれか。
+
+    Returns:
+        ValueSpec: range は RangeSpec、candidate は CandidateSpec、欠落は None。
+    """
     if raw is None:
         return None
     node = cast(dict[str, object], raw)
@@ -53,6 +61,14 @@ def _parse_value(raw: object) -> ValueSpec:
 
 
 def load_topics(topics_path: Path) -> list[TopicTemplate]:
+    """お題テンプレート JSON を読み込む。
+
+    Args:
+        topics_path: お題テンプレートの JSON ファイル。
+
+    Returns:
+        list[TopicTemplate]: 読み込んだ全テンプレート。
+    """
     raw = cast(list[dict[str, object]], json.loads(topics_path.read_text(encoding="utf-8")))
     templates: list[TopicTemplate] = []
     for node in raw:

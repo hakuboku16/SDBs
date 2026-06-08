@@ -136,5 +136,10 @@ class GameSession:
 
     @property
     def grid_size(self) -> int:
+        """盤面の一辺あたりのパネル数を返す。
+
+        Returns:
+            int: panel_count の平方根(2/3/4/5)。
+        """
         # grid_size を別フィールドに持たず panel_count から導出し単一情報源に保つ。
         return isqrt(self.panel_count)
