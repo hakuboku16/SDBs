@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Python project template with common logging/config foundation"
 requires-python = ">=3.12"
 dependencies = [
+    "pillow>=12.2.0",
     "pydantic-settings>=2.0",
 ]
 
