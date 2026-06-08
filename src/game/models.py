@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
+from math import isqrt
 from pathlib import Path
 
 
@@ -108,3 +110,31 @@ class PlayReport:
     difficulty: Difficulty
     combo: int
     charming: int
+
+
+@dataclass(frozen=True)
+class ImageOptions:
+    """盤面画像への加工設定。開始時に解決済みの値を保持し以後固定。"""
+
+    rotate: int | None
+    grayscale: bool
+    mosaic_px: int | None
+
+
+@dataclass
+class GameSession:
+    """単一アクティブセッションの状態。進行で更新するため frozen にしない。"""
+
+    panel_count: int
+    hidden_song: Song
+    image_options: ImageOptions
+    topics: list[Topic]
+    started_at: datetime
+    ends_at: datetime
+    revealed_panels: set[int] = field(default_factory=set)
+    correct_answerers: set[int] = field(default_factory=set)
+
+    @property
+    def grid_size(self) -> int:
+        # panel_count(4/9/16/25)の平方根が盤面の一辺(2/3/4/5)。
+        return isqrt(self.panel_count)
