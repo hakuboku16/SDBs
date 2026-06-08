@@ -24,10 +24,16 @@ class SessionManager:
     """単一プロセス内の単一アクティブセッションを管理する(再起動で揮発)。"""
 
     def __init__(self) -> None:
+        """セッション未保持の状態で初期化する。"""
         self._session: GameSession | None = None
 
     @property
     def active(self) -> GameSession | None:
+        """現在のアクティブセッションを返す。
+
+        Returns:
+            GameSession | None: アクティブセッション。無ければ None。
+        """
         return self._session
 
     def start(
@@ -40,6 +46,23 @@ class SessionManager:
         now: datetime,
         duration_minutes: int,
     ) -> GameSession:
+        """新しいアクティブセッションを開始して保持する。
+
+        Args:
+            hidden_song: 出題する隠し曲(解決済み)。
+            image_options: 盤面画像の加工設定(解決済み)。
+            topics: 出題するお題群。
+            panel_count: 盤面のパネル数。4/9/16/25 のいずれか。
+            now: 開始時刻。ends_at の基準に使う。
+            duration_minutes: セッションの継続時間(分)。
+
+        Returns:
+            GameSession: 生成して保持したセッション。
+
+        Raises:
+            SessionAlreadyActiveError: 既にアクティブなセッションが存在する場合。
+            ValueError: panel_count が 4/9/16/25 のいずれでもない場合。
+        """
         if self._session is not None:
             raise SessionAlreadyActiveError
         if panel_count not in _VALID_PANEL_COUNTS:
@@ -56,6 +79,17 @@ class SessionManager:
         return session
 
     def apply_report(self, report: PlayReport) -> list[Topic]:
+        """プレイ申告を全お題へ照合し、新規達成パネルを開示する。
+
+        Args:
+            report: プレイ申告 1 件。
+
+        Returns:
+            list[Topic]: この申告で新たに達成したお題。
+
+        Raises:
+            NoActiveSessionError: アクティブなセッションが存在しない場合。
+        """
         session = self._require_active()
         newly_completed = match_play_report(report, session.topics)
         for topic in newly_completed:
@@ -63,6 +97,18 @@ class SessionManager:
         return newly_completed
 
     def record_answer(self, user_id: int, song: Song) -> bool:
+        """隠し曲の当てを照合し、正解なら回答者を記録する。
+
+        Args:
+            user_id: 回答した Discord ユーザー ID。
+            song: 回答として解決済みの曲。
+
+        Returns:
+            bool: 隠し曲と一致すれば True。
+
+        Raises:
+            NoActiveSessionError: アクティブなセッションが存在しない場合。
+        """
         session = self._require_active()
         # 隠し曲との一致は解決済み Song の title で判定する。部分一致解決は cog の責務。
         correct = song.title == session.hidden_song.title
@@ -71,25 +117,70 @@ class SessionManager:
         return correct
 
     def is_expired(self, now: datetime) -> bool:
+        """セッションが有効期限を過ぎたか判定する。
+
+        Args:
+            now: 判定の基準時刻。
+
+        Returns:
+            bool: now が ends_at 以上なら True。
+
+        Raises:
+            NoActiveSessionError: アクティブなセッションが存在しない場合。
+        """
         session = self._require_active()
         return now >= session.ends_at
 
     def remaining(self, now: datetime) -> timedelta:
+        """有効期限までの残り時間を返す。
+
+        Args:
+            now: 判定の基準時刻。
+
+        Returns:
+            timedelta: ends_at - now。期限超過時は負値。
+
+        Raises:
+            NoActiveSessionError: アクティブなセッションが存在しない場合。
+        """
         session = self._require_active()
         return session.ends_at - now
 
     def end(self) -> GameSession:
-        """最終状態を返して破棄する。アーカイブ(画像合成・投稿)は呼び出し側が返り値を消費する。"""
+        """最終状態を返してセッションを破棄する。
+
+        アーカイブ(画像合成・投稿)は呼び出し側が返り値を消費する。
+
+        Returns:
+            GameSession: 破棄直前の最終セッション。
+
+        Raises:
+            NoActiveSessionError: アクティブなセッションが存在しない場合。
+        """
         session = self._require_active()
         self._session = None
         return session
 
     def clear(self) -> None:
-        """アーカイブ無しで強制破棄する。返り値を持たないのは消費すべき最終状態が無いため。"""
+        """アーカイブ無しでセッションを強制破棄する。
+
+        返り値を持たないのは消費すべき最終状態が無いため。
+
+        Raises:
+            NoActiveSessionError: アクティブなセッションが存在しない場合。
+        """
         self._require_active()
         self._session = None
 
     def _require_active(self) -> GameSession:
+        """アクティブセッションを返す。無ければ送出する。
+
+        Returns:
+            GameSession: 現在のアクティブセッション。
+
+        Raises:
+            NoActiveSessionError: アクティブなセッションが存在しない場合。
+        """
         if self._session is None:
             raise NoActiveSessionError
         return self._session
