@@ -79,11 +79,13 @@ class SessionManager:
         return session.ends_at - now
 
     def end(self) -> GameSession:
+        """最終状態を返して破棄する。アーカイブ(画像合成・投稿)は呼び出し側が返り値を消費する。"""
         session = self._require_active()
         self._session = None
         return session
 
     def clear(self) -> None:
+        """アーカイブ無しで強制破棄する。返り値を持たないのは消費すべき最終状態が無いため。"""
         self._require_active()
         self._session = None
 
