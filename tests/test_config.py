@@ -71,3 +71,19 @@ def test_base_defaults() -> None:
     base = BaseAppSettings(app_env=AppEnv.DEVELOPMENT)
     assert base.log_dir == "logs"
     assert base.log_backup_days == 30
+
+
+def test_game_defaults() -> None:
+    """Discord/ゲーム設定の既定値が想定どおりであることを確認する。"""
+    # ローカル .env に実 token/ID が入っていても既定値を検証できるよう .env を無効化する。
+    base = BaseAppSettings(app_env=AppEnv.DEVELOPMENT, _env_file=None)
+    assert base.discord_token == ""
+    assert base.game_guild_id == 0
+    assert base.log_guild_id == 0
+    assert base.log_channel_id == 0
+    assert base.archive_channel_id == 0
+    assert base.songs_data_path == "assets/data/all_songs.json"
+    assert base.topics_data_path == "assets/data/all_topics.json"
+    assert base.images_dir == "assets/images"
+    assert base.session_duration_minutes == 30
+    assert base.session_warning_minutes == 10
