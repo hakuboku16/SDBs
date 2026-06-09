@@ -15,7 +15,7 @@ class AppEnv(str, Enum):
 class BaseAppSettings(BaseSettings):
     """アプリ全体で共有する設定の基底クラス。
 
-    環境変数および .env ファイルからログ関連の既定値を読み込む。
+    環境変数および .env ファイルからログ・Discord・ゲームセッション関連の設定を読み込む。
     """
 
     model_config = SettingsConfigDict(
@@ -29,6 +29,22 @@ class BaseAppSettings(BaseSettings):
     log_dir: str = "logs"
     log_file_name: str = "python.log"
     log_backup_days: int = 30
+
+    # Discord(秘匿値・ID は .env 管理。既定は未設定相当)
+    discord_token: str = ""
+    game_guild_id: int = 0
+    log_guild_id: int = 0
+    log_channel_id: int = 0
+    archive_channel_id: int = 0
+
+    # データ/アセット
+    songs_data_path: str = "assets/data/all_songs.json"
+    topics_data_path: str = "assets/data/all_topics.json"
+    images_dir: str = "assets/images"
+
+    # セッション(分)
+    session_duration_minutes: int = 30
+    session_warning_minutes: int = 10
 
 
 class DevSettings(BaseAppSettings):
