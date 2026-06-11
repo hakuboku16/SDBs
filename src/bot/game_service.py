@@ -5,9 +5,10 @@ from datetime import datetime
 from pathlib import Path
 
 from src.core.config import BaseAppSettings
+from src.game.board import render_board
 from src.game.image_options import resolve_image_options
 from src.game.models import GameSession, Song, Topic
-from src.game.session_manager import SessionManager
+from src.game.session_manager import NoActiveSessionError, SessionManager
 from src.game.song_repository import SongRepository
 from src.game.topic_catalog import TopicTemplate, load_topics
 from src.game.topic_generator import generate_topics
@@ -60,6 +61,24 @@ def format_topic_list(topics: list[Topic]) -> str:
             line += " 達成"
         lines.append(line)
     return "\n".join(lines)
+
+
+def timer_delays(
+    session: GameSession, *, now: datetime, warning_minutes: int
+) -> tuple[float, float]:
+    """セッションの予告までと終了までの待機秒数を計算する。
+
+    Args:
+        session: 対象セッション。ends_at を基準にする。
+        now: 現在時刻。
+        warning_minutes: 終了の何分前に予告するか。
+
+    Returns:
+        tuple[float, float]: (予告までの秒数, 終了までの秒数)。
+    """
+    end_seconds = (session.ends_at - now).total_seconds()
+    warning_seconds = end_seconds - warning_minutes * 60
+    return warning_seconds, end_seconds
 
 
 class GameService:
@@ -184,3 +203,28 @@ class GameService:
             now=now,
             duration_minutes=self._settings.session_duration_minutes,
         )
+
+    def render_current_board(self) -> bytes:
+        """アクティブセッションの現在の盤面 PNG を生成する。
+
+        Returns:
+            bytes: PNG エンコードした盤面画像。
+
+        Raises:
+            NoActiveSessionError: アクティブなセッションが無い場合。
+        """
+        session = self.session_manager._require_active()
+        assert session.hidden_song.image_path is not None  # 隠し曲は画像保有曲から抽選済み
+        return render_board(
+            session.hidden_song.image_path,
+            grid_size=session.grid_size,
+            revealed_panels=session.revealed_panels,
+            options=session.image_options,
+        )
+
+    def cancel_timer(self) -> None:
+        """進行中のタイマータスクがあれば取り消す。"""
+        # 手動終了/強制クリア時に自動終了タイマーが二重発火しないよう取り消す。
+        if self.timer_task is not None:
+            self.timer_task.cancel()
+            self.timer_task = None

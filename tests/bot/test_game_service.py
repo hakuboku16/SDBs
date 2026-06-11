@@ -105,3 +105,42 @@ def test_format_topic_list_orders_by_panel_and_shows_progress() -> None:
         "パネル1: 説明1 [1/2]\n"
         "パネル2: 説明2 [3/3] 達成"
     )
+
+
+from datetime import datetime, timedelta
+
+from src.bot.game_service import timer_delays
+from src.game.models import GameSession, ImageOptions
+
+
+def _session_for_timer(now: datetime) -> GameSession:
+    """タイマー計算用に ends_at だけ意味を持つ最小セッションを作る。
+
+    Args:
+        now: started_at。ends_at は now+30 分にする。
+
+    Returns:
+        GameSession: 計算対象のセッション。
+    """
+    return GameSession(
+        panel_count=4,
+        hidden_song=_song("Dream", image=True),
+        image_options=ImageOptions(rotate=None, grayscale=False, mosaic_px=None),
+        topics=[],
+        started_at=now,
+        ends_at=now + timedelta(minutes=30),
+    )
+
+
+def test_timer_delays_returns_warning_and_end_seconds() -> None:
+    """予告は ends_at の warning 分前、終了は ends_at までの秒数を返す。"""
+    now = datetime(2026, 6, 10, 12, 0, 0)
+    warn, end = timer_delays(_session_for_timer(now), now=now, warning_minutes=10)
+    assert (warn, end) == (1200.0, 1800.0)
+
+
+def test_cancel_timer_is_noop_without_task() -> None:
+    """タイマータスク未設定でも cancel_timer は例外を出さない。"""
+    service = _service([_song("Dream")])
+    service.cancel_timer()  # 何も起きない
+    assert service.timer_task is None

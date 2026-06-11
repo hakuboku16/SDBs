@@ -41,3 +41,19 @@ def test_start_session_sets_ends_at_from_settings_duration() -> None:
     )
     duration = get_settings().session_duration_minutes
     assert (session.ends_at - session.started_at).total_seconds() == duration * 60
+
+
+from io import BytesIO
+
+from PIL import Image
+
+
+def test_render_current_board_returns_300px_png() -> None:
+    """開始後の盤面描画は 300px 正方の PNG を返す。"""
+    service = _service()
+    service.start_session(
+        panel_count=4, rotate=False, grayscale=False, mosaic_px=None, now=_NOW
+    )
+    out = Image.open(BytesIO(service.render_current_board()))
+    assert out.format == "PNG"
+    assert out.size == (300, 300)
