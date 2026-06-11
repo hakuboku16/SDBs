@@ -153,3 +153,39 @@ def test_generic_error_message_is_user_facing_japanese() -> None:
     """汎用エラー文言は内部情報を含まない利用者向けの定型文である。"""
     assert "エラー" in GENERIC_ERROR_MESSAGE
     assert "Traceback" not in GENERIC_ERROR_MESSAGE
+
+
+from src.bot.game_service import format_archive_caption
+
+
+def _session_with_answerers(answerers: set[int]) -> GameSession:
+    """正解者集合だけ意味を持つ最小セッションを作る。
+
+    Args:
+        answerers: correct_answerers に入れるユーザー ID 集合。
+
+    Returns:
+        GameSession: 構築したセッション。
+    """
+    now = datetime(2026, 6, 10, 12, 0, 0)
+    return GameSession(
+        panel_count=4,
+        hidden_song=_song("Dream", image=True),
+        image_options=ImageOptions(rotate=None, grayscale=False, mosaic_px=None),
+        topics=[],
+        started_at=now,
+        ends_at=now + timedelta(minutes=30),
+        correct_answerers=answerers,
+    )
+
+
+def test_archive_caption_spoiler_tags_title_and_lists_answerers() -> None:
+    """曲名はネタバレ記法で隠し、正解者はメンション列挙する。"""
+    caption = format_archive_caption(_session_with_answerers({111, 222}))
+    assert caption == "隠し曲: ||Dream||\n正解者: <@111>、<@222>"
+
+
+def test_archive_caption_shows_none_when_no_answerers() -> None:
+    """正解者がいなければ「なし」と表示する。"""
+    caption = format_archive_caption(_session_with_answerers(set()))
+    assert caption == "隠し曲: ||Dream||\n正解者: なし"

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import random
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
+
+import discord
 
 from src.core.config import BaseAppSettings
 from src.game.board import render_board
@@ -14,6 +18,7 @@ from src.game.topic_catalog import TopicTemplate, load_topics
 from src.game.topic_generator import generate_topics
 
 GENERIC_ERROR_MESSAGE = "コマンドの実行中にエラーが発生しました。しばらくして再度お試しください。"
+BOARD_FILENAME = "board.png"
 
 
 class SongResolutionError(Exception):
@@ -65,6 +70,20 @@ def format_topic_list(topics: list[Topic]) -> str:
     return "\n".join(lines)
 
 
+def format_archive_caption(session: GameSession) -> str:
+    """セッション終了アーカイブ用の文言を生成する。
+
+    Args:
+        session: 終了するセッション。
+
+    Returns:
+        str: 隠し曲名をネタバレ記法で隠し、正解者をメンション列挙した文言。
+    """
+    answerers = sorted(session.correct_answerers)
+    mentions = "、".join(f"<@{uid}>" for uid in answerers) if answerers else "なし"
+    return f"隠し曲: ||{session.hidden_song.title}||\n正解者: {mentions}"
+
+
 def timer_delays(
     session: GameSession, *, now: datetime, warning_minutes: int
 ) -> tuple[float, float]:
@@ -111,10 +130,10 @@ class GameService:
         self._settings = settings
         self._rng = rng or random.Random()
         self.session_manager = SessionManager()
-        # Discord 側状態。実体は後続タスクで discord.Message / asyncio.Task を入れる。
-        self.board_message: object | None = None
-        self.topic_message: object | None = None
-        self.timer_task: object | None = None
+        # Discord 側状態。投稿・タイマー開始時に実体を入れる。
+        self.board_message: discord.Message | None = None
+        self.topic_message: discord.Message | None = None
+        self.timer_task: asyncio.Task[None] | None = None
 
     @classmethod
     def from_settings(
@@ -166,6 +185,15 @@ class GameService:
             GameSession | None: アクティブセッション。無ければ None。
         """
         return self.session_manager.active
+
+    @property
+    def settings(self) -> BaseAppSettings:
+        """保持するアプリ設定を返す。
+
+        Returns:
+            BaseAppSettings: チャンネル ID・セッション時間等の設定。
+        """
+        return self._settings
 
     def start_session(
         self,
@@ -230,3 +258,96 @@ class GameService:
         if self.timer_task is not None:
             self.timer_task.cancel()
             self.timer_task = None
+
+    async def post_session_messages(self, channel: discord.abc.Messageable) -> None:
+        """盤面とお題リストを投稿してピン留めし、参照を保持する。
+
+        Args:
+            channel: 投稿先チャンネル。
+        """
+        session = self.session_manager._require_active()
+        png = self.render_current_board()
+        board_msg = await channel.send(
+            file=discord.File(BytesIO(png), filename=BOARD_FILENAME)
+        )
+        topic_msg = await channel.send(format_topic_list(session.topics))
+        await board_msg.pin()
+        await topic_msg.pin()
+        self.board_message = board_msg
+        self.topic_message = topic_msg
+
+    async def refresh_board(self) -> None:
+        """盤面とお題リストのメッセージを現在の状態へ更新する。"""
+        session = self.session_manager._require_active()
+        png = self.render_current_board()
+        if self.board_message is not None:
+            await self.board_message.edit(
+                attachments=[discord.File(BytesIO(png), filename=BOARD_FILENAME)]
+            )
+        if self.topic_message is not None:
+            await self.topic_message.edit(content=format_topic_list(session.topics))
+
+    async def end_session(
+        self, archive_channel: discord.abc.Messageable
+    ) -> GameSession:
+        """現時点の盤面をアーカイブし、ピンを解除してセッションを終了する。
+
+        Args:
+            archive_channel: アーカイブ投稿先チャンネル。
+
+        Returns:
+            GameSession: 終了直前の最終セッション。
+
+        Raises:
+            NoActiveSessionError: アクティブなセッションが無い場合。
+        """
+        session = self.session_manager._require_active()
+        png = self.render_current_board()
+        await archive_channel.send(
+            content=format_archive_caption(session),
+            file=discord.File(BytesIO(png), filename=BOARD_FILENAME),
+        )
+        await self._unpin_messages()
+        # 自動終了経由ではタイマー自身がこの後終了するため、ここでは取り消さず参照だけ落とす。
+        self.timer_task = None
+        return self.session_manager.end()
+
+    async def clear_session(self) -> None:
+        """アーカイブせずにセッションを強制破棄する。
+
+        Raises:
+            NoActiveSessionError: アクティブなセッションが無い場合。
+        """
+        self.cancel_timer()
+        await self._unpin_messages()
+        self.session_manager.clear()
+
+    async def _unpin_messages(self) -> None:
+        """盤面・お題リストのピンを解除し、参照を落とす。"""
+        for message in (self.board_message, self.topic_message):
+            if message is not None:
+                await message.unpin()
+        self.board_message = None
+        self.topic_message = None
+
+    async def run_timer(
+        self, archive_channel: discord.abc.Messageable, *, now: datetime
+    ) -> None:
+        """予告と自動終了を行うタイマーを実走する。
+
+        Args:
+            archive_channel: 自動終了時のアーカイブ投稿先。
+            now: 開始時刻。残り時間計算の基準。
+        """
+        session = self.session_manager._require_active()
+        warning_seconds, end_seconds = timer_delays(
+            session, now=now, warning_minutes=self._settings.session_warning_minutes
+        )
+        if warning_seconds > 0:
+            await asyncio.sleep(warning_seconds)
+        if self.board_message is not None:
+            await self.board_message.channel.send(
+                f"残り{self._settings.session_warning_minutes}分です。"
+            )
+        await asyncio.sleep(max(end_seconds - max(warning_seconds, 0.0), 0.0))
+        await self.end_session(archive_channel)
