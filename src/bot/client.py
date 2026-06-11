@@ -9,7 +9,7 @@ from discord.ext import commands
 
 from discord import app_commands
 
-from src.bot.game_service import GENERIC_ERROR_MESSAGE
+from src.bot.game_service import GENERIC_ERROR_MESSAGE, GameService
 from src.bot.discord_log_handler import DiscordLogHandler
 from src.core.config import BaseAppSettings
 
@@ -32,6 +32,7 @@ class GameBot(commands.Bot):
         self._settings = settings
         self._log_queue: asyncio.Queue[str] = asyncio.Queue()
         self._log_started = False
+        self.game = GameService.from_settings(settings)
 
     async def setup_hook(self) -> None:
         """接続前に cog をロードし、アプリコマンド共通エラーハンドラを結線する。"""
