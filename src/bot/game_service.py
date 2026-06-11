@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import random
+from datetime import datetime
 from pathlib import Path
 
 from src.core.config import BaseAppSettings
-from src.game.models import Song, Topic
+from src.game.image_options import resolve_image_options
+from src.game.models import GameSession, Song, Topic
 from src.game.session_manager import SessionManager
 from src.game.song_repository import SongRepository
 from src.game.topic_catalog import TopicTemplate, load_topics
+from src.game.topic_generator import generate_topics
 
 
 class SongResolutionError(Exception):
@@ -133,3 +136,51 @@ class GameService:
         if len(matches) > 1:
             raise AmbiguousSong(matches)
         return matches[0]
+
+    @property
+    def session(self) -> GameSession | None:
+        """現在のアクティブセッションを返す。
+
+        Returns:
+            GameSession | None: アクティブセッション。無ければ None。
+        """
+        return self.session_manager.active
+
+    def start_session(
+        self,
+        *,
+        panel_count: int,
+        rotate: bool,
+        grayscale: bool,
+        mosaic_px: int | None,
+        now: datetime,
+    ) -> GameSession:
+        """隠し曲抽選・画像設定確定・お題生成を束ねてセッションを開始する。
+
+        Args:
+            panel_count: 盤面パネル数。4/9/16/25 のいずれか。
+            rotate: 回転を行うか。
+            grayscale: グレースケール化するか。
+            mosaic_px: モザイクの縮小先 px。None ならモザイクなし。
+            now: 開始時刻。ends_at の基準に使う。
+
+        Returns:
+            GameSession: 開始して保持したセッション。
+
+        Raises:
+            SessionAlreadyActiveError: 既にアクティブなセッションがある場合。
+            ValueError: panel_count が 4/9/16/25 のいずれでもない場合。
+        """
+        hidden_song = self._rng.choice(self._repo.songs_with_image())
+        image_options = resolve_image_options(
+            rotate=rotate, grayscale=grayscale, mosaic_px=mosaic_px, rng=self._rng
+        )
+        topics = generate_topics(self._templates, panel_count, self._repo, self._rng)
+        return self.session_manager.start(
+            hidden_song=hidden_song,
+            image_options=image_options,
+            topics=topics,
+            panel_count=panel_count,
+            now=now,
+            duration_minutes=self._settings.session_duration_minutes,
+        )
