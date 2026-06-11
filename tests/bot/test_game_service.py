@@ -189,3 +189,31 @@ def test_archive_caption_shows_none_when_no_answerers() -> None:
     """正解者がいなければ「なし」と表示する。"""
     caption = format_archive_caption(_session_with_answerers(set()))
     assert caption == "隠し曲: ||Dream||\n正解者: なし"
+
+
+from src.bot.game_service import format_completed_topics, format_progress_text
+
+
+def test_format_completed_topics_lists_panel_and_description() -> None:
+    """達成お題をパネル番号順に「パネルN: 説明」で列挙する。"""
+    topics = [
+        _topic(3, progress=2, required=2, completed=True),
+        _topic(1, progress=1, required=1, completed=True),
+    ]
+    assert format_completed_topics(topics) == "パネル1: 説明1\nパネル3: 説明3"
+
+
+def test_format_progress_text_shows_remaining_minutes_and_topics() -> None:
+    """残り時間(分・切り捨て)とお題リストを併記する。"""
+    session = _session_for_timer(datetime(2026, 6, 10, 12, 0, 0))
+    session.topics = [_topic(1, progress=1, required=2, completed=False)]
+    text = format_progress_text(session, timedelta(minutes=12, seconds=30))
+    assert text == "残り時間: 約12分\n\nパネル1: 説明1 [1/2]"
+
+
+def test_format_progress_text_clamps_negative_remaining_to_zero() -> None:
+    """残り時間が負なら 0 分として表示する。"""
+    session = _session_for_timer(datetime(2026, 6, 10, 12, 0, 0))
+    session.topics = []
+    text = format_progress_text(session, timedelta(seconds=-5))
+    assert text.startswith("残り時間: 約0分")

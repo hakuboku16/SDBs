@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 
@@ -82,6 +82,35 @@ def format_archive_caption(session: GameSession) -> str:
     answerers = sorted(session.correct_answerers)
     mentions = "、".join(f"<@{uid}>" for uid in answerers) if answerers else "なし"
     return f"隠し曲: ||{session.hidden_song.title}||\n正解者: {mentions}"
+
+
+def format_completed_topics(topics: list[Topic]) -> str:
+    """新規達成お題を公開表示用に整形する。
+
+    Args:
+        topics: 新規達成したお題群。
+
+    Returns:
+        str: パネル番号昇順に「パネルN: 説明」を改行連結した文字列。
+    """
+    return "\n".join(
+        f"パネル{t.panel_no}: {t.description}"
+        for t in sorted(topics, key=lambda t: t.panel_no)
+    )
+
+
+def format_progress_text(session: GameSession, remaining: timedelta) -> str:
+    """進捗表示(残り時間 + お題リスト)を整形する。
+
+    Args:
+        session: 表示対象のセッション。
+        remaining: 終了までの残り時間。負値は 0 分として扱う。
+
+    Returns:
+        str: 残り時間とお題リストを併記した文字列。
+    """
+    minutes = max(int(remaining.total_seconds() // 60), 0)
+    return f"残り時間: 約{minutes}分\n\n{format_topic_list(session.topics)}"
 
 
 def timer_delays(
