@@ -144,3 +144,12 @@ def test_cancel_timer_is_noop_without_task() -> None:
     service = _service([_song("Dream")])
     service.cancel_timer()  # 何も起きない
     assert service.timer_task is None
+
+
+from src.bot.game_service import GENERIC_ERROR_MESSAGE
+
+
+def test_generic_error_message_is_user_facing_japanese() -> None:
+    """汎用エラー文言は内部情報を含まない利用者向けの定型文である。"""
+    assert "エラー" in GENERIC_ERROR_MESSAGE
+    assert "Traceback" not in GENERIC_ERROR_MESSAGE

@@ -13,6 +13,8 @@ from src.game.song_repository import SongRepository
 from src.game.topic_catalog import TopicTemplate, load_topics
 from src.game.topic_generator import generate_topics
 
+GENERIC_ERROR_MESSAGE = "コマンドの実行中にエラーが発生しました。しばらくして再度お試しください。"
+
 
 class SongResolutionError(Exception):
     """曲名解決に関する基底例外。"""
