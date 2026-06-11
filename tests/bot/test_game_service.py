@@ -64,3 +64,44 @@ def test_resolve_song_multiple_matches_raises_ambiguous() -> None:
     with pytest.raises(AmbiguousSong) as exc:
         service.resolve_song("Dream")
     assert {s.title for s in exc.value.matches} == {"Dream", "Dreamy"}
+
+
+from src.bot.game_service import format_topic_list
+from src.game.models import PlayCondition, ProgressKind, Topic, TopicType
+
+
+def _topic(panel_no: int, *, progress: int, required: int, completed: bool) -> Topic:
+    """テスト用のお題を組み立てる。
+
+    Args:
+        panel_no: パネル番号。
+        progress: 現在の進捗。
+        required: 達成に必要な値。
+        completed: 達成済みか。
+
+    Returns:
+        Topic: 構築したお題。
+    """
+    return Topic(
+        panel_no=panel_no,
+        topic_type=TopicType.TITLE_INCLUDE,
+        play_condition=PlayCondition.PLAY,
+        filter_value=("a",),
+        required=required,
+        progress_kind=ProgressKind.COUNT,
+        description=f"説明{panel_no}",
+        progress=progress,
+        completed=completed,
+    )
+
+
+def test_format_topic_list_orders_by_panel_and_shows_progress() -> None:
+    """パネル番号順に「パネルN: 説明 [x/y]」を並べ、達成行には達成表示を付ける。"""
+    topics = [
+        _topic(2, progress=3, required=3, completed=True),
+        _topic(1, progress=1, required=2, completed=False),
+    ]
+    assert format_topic_list(topics) == (
+        "パネル1: 説明1 [1/2]\n"
+        "パネル2: 説明2 [3/3] 達成"
+    )

@@ -4,7 +4,7 @@ import random
 from pathlib import Path
 
 from src.core.config import BaseAppSettings
-from src.game.models import Song
+from src.game.models import Song, Topic
 from src.game.session_manager import SessionManager
 from src.game.song_repository import SongRepository
 from src.game.topic_catalog import TopicTemplate, load_topics
@@ -38,6 +38,25 @@ class AmbiguousSong(SongResolutionError):
         """
         super().__init__(f"{len(matches)} matches")
         self.matches = matches
+
+
+def format_topic_list(topics: list[Topic]) -> str:
+    """ピン留め用のお題リスト文字列を生成する。
+
+    Args:
+        topics: 表示するお題群。
+
+    Returns:
+        str: パネル番号昇順に「パネルN: 説明 [progress/required]」を改行連結した文字列。
+            達成済みの行には末尾に「 達成」を付ける。
+    """
+    lines: list[str] = []
+    for topic in sorted(topics, key=lambda t: t.panel_no):
+        line = f"パネル{topic.panel_no}: {topic.description} [{topic.progress}/{topic.required}]"
+        if topic.completed:
+            line += " 達成"
+        lines.append(line)
+    return "\n".join(lines)
 
 
 class GameService:
