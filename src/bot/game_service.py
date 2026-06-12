@@ -13,7 +13,7 @@ from src.game.board import render_board
 from src.game.image_options import resolve_image_options
 from src.game.models import GameSession, Song, Topic
 from src.game.session_manager import NoActiveSessionError, SessionManager
-from src.game.song_repository import SongRepository
+from src.game.song_repository import SongRepository, _normalize
 from src.game.topic_catalog import TopicTemplate, load_topics
 from src.game.topic_generator import generate_topics
 
@@ -187,7 +187,7 @@ class GameService:
         return cls(repo=repo, templates=templates, settings=settings, rng=rng)
 
     def resolve_song(self, query: str) -> Song:
-        """部分一致で曲を 1 件に解決する。
+        """部分一致で曲を 1 件に解決する。完全一致する曲名があれば優先する。
 
         Args:
             query: 検索語。
@@ -197,11 +197,17 @@ class GameService:
 
         Raises:
             SongNotFound: 部分一致が 0 件の場合。
-            AmbiguousSong: 部分一致が複数件の場合。
+            AmbiguousSong: 完全一致が無く部分一致が複数件の場合。
         """
         matches = self._repo.search(query)
         if not matches:
             raise SongNotFound(query)
+        # オートコンプリートで選んだ曲名が別曲名の部分文字列でも確実に解決できるよう、
+        # 正規化後に完全一致する曲があればそれを優先する。
+        needle = _normalize(query).casefold()
+        for song in matches:
+            if _normalize(song.title).casefold() == needle:
+                return song
         if len(matches) > 1:
             raise AmbiguousSong(matches)
         return matches[0]

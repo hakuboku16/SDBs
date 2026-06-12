@@ -59,11 +59,23 @@ def test_resolve_song_no_match_raises_not_found() -> None:
 
 
 def test_resolve_song_multiple_matches_raises_ambiguous() -> None:
-    """部分一致が複数なら AmbiguousSong を送出し、候補を保持する。"""
+    """完全一致が無く部分一致が複数なら AmbiguousSong を送出し、候補を保持する。"""
     service = _service([_song("Dream"), _song("Dreamy"), _song("Pulses")])
     with pytest.raises(AmbiguousSong) as exc:
-        service.resolve_song("Dream")
+        service.resolve_song("Drea")
     assert {s.title for s in exc.value.matches} == {"Dream", "Dreamy"}
+
+
+def test_resolve_song_exact_title_match_wins_over_substring() -> None:
+    """query が曲名と完全一致するなら、部分文字列で複数ヒットしてもその曲を返す。"""
+    service = _service([_song("Dream"), _song("Dreamy")])
+    assert service.resolve_song("Dream").title == "Dream"
+
+
+def test_resolve_song_exact_match_is_normalized_and_case_insensitive() -> None:
+    """完全一致判定は正規化 + 大文字小文字無視で行う。"""
+    service = _service([_song("Dream"), _song("Dreamy")])
+    assert service.resolve_song("dream").title == "Dream"
 
 
 from src.bot.game_service import format_topic_list
