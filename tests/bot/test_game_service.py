@@ -229,3 +229,21 @@ def test_format_progress_text_clamps_negative_remaining_to_zero() -> None:
     session.topics = []
     text = format_progress_text(session, timedelta(seconds=-5))
     assert text.startswith("残り時間: 約0分")
+
+
+def test_suggest_song_titles_empty_query_returns_first_n_sorted() -> None:
+    """空入力なら全曲名を昇順ソートし先頭 limit 件を返す。"""
+    service = _service([_song("Cytus"), _song("Anima"), _song("Bond")])
+    assert service.suggest_song_titles("", limit=2) == ["Anima", "Bond"]
+
+
+def test_suggest_song_titles_filters_by_partial_match_sorted() -> None:
+    """非空入力は部分一致で絞り込み、曲名昇順で返す。"""
+    service = _service([_song("Dreamy"), _song("Dream"), _song("Pulses")])
+    assert service.suggest_song_titles("dre") == ["Dream", "Dreamy"]
+
+
+def test_suggest_song_titles_caps_at_limit() -> None:
+    """一致が limit を超えても limit 件で打ち切る。"""
+    service = _service([_song(f"Song{i:02d}") for i in range(30)])
+    assert len(service.suggest_song_titles("Song", limit=25)) == 25

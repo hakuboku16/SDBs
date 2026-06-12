@@ -212,6 +212,20 @@ class GameService:
             raise AmbiguousSong(matches)
         return matches[0]
 
+    def suggest_song_titles(self, query: str, *, limit: int = 25) -> list[str]:
+        """オートコンプリート用に曲名候補を返す。
+
+        Args:
+            query: 入力中の検索語。空なら全曲が対象。
+            limit: 返す最大件数。Discord の候補上限に合わせ既定 25。
+
+        Returns:
+            list[str]: 曲名昇順で先頭 limit 件の曲名。
+        """
+        songs = self._repo.songs if not query.strip() else self._repo.search(query)
+        titles = sorted(song.title for song in songs)
+        return titles[:limit]
+
     @property
     def session(self) -> GameSession | None:
         """現在のアクティブセッションを返す。
