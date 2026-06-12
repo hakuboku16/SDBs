@@ -26,6 +26,23 @@ class SongReportCog(commands.Cog):
         """
         self.bot = bot
 
+    async def _song_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        """曲名候補を返す。セッション有無に関わらず全曲を対象にする。
+
+        Args:
+            interaction: オートコンプリートのインタラクション。
+            current: 入力中の文字列。
+
+        Returns:
+            list[app_commands.Choice[str]]: 曲名候補(最大 25 件)。
+        """
+        return [
+            app_commands.Choice(name=title, value=title)
+            for title in self.bot.game.suggest_song_titles(current)
+        ]
+
     @app_commands.command(name="report", description="プレイ結果を申告する")
     @app_commands.describe(
         song="曲名(部分一致)",
@@ -34,6 +51,7 @@ class SongReportCog(commands.Cog):
         charming="獲得チャーミング数",
     )
     @app_commands.choices(difficulty=_DIFFICULTY_CHOICES)
+    @app_commands.autocomplete(song=_song_autocomplete)
     async def report(
         self,
         interaction: discord.Interaction,
