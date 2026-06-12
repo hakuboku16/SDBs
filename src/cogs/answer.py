@@ -19,8 +19,26 @@ class AnswerCog(commands.Cog):
         """
         self.bot = bot
 
+    async def _song_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        """曲名候補を返す。セッション有無に関わらず全曲を対象にする。
+
+        Args:
+            interaction: オートコンプリートのインタラクション。
+            current: 入力中の文字列。
+
+        Returns:
+            list[app_commands.Choice[str]]: 曲名候補(最大 25 件)。
+        """
+        return [
+            app_commands.Choice(name=title, value=title)
+            for title in self.bot.game.suggest_song_titles(current)
+        ]
+
     @app_commands.command(name="answer", description="隠し曲を当てる")
     @app_commands.describe(song="曲名(部分一致)")
+    @app_commands.autocomplete(song=_song_autocomplete)
     async def answer(self, interaction: discord.Interaction, song: str) -> None:
         """隠し曲と照合し、正解なら回答者を記録する(全て ephemeral)。
 
