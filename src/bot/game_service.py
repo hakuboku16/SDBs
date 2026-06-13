@@ -13,7 +13,7 @@ from src.game.board import render_board
 from src.game.image_options import resolve_image_options
 from src.game.models import GameSession, Song, Topic
 from src.game.session_manager import NoActiveSessionError, SessionManager
-from src.game.song_repository import SongRepository, _normalize
+from src.game.song_repository import SongRepository
 from src.game.topic_catalog import TopicTemplate, load_topics
 from src.game.topic_generator import generate_topics
 
@@ -203,11 +203,10 @@ class GameService:
         if not matches:
             raise SongNotFound(query)
         # オートコンプリートで選んだ曲名が別曲名の部分文字列でも確実に解決できるよう、
-        # 正規化後に完全一致する曲があればそれを優先する。
-        needle = _normalize(query).casefold()
-        for song in matches:
-            if _normalize(song.title).casefold() == needle:
-                return song
+        # 完全一致する曲があればそれを優先する。
+        exact = self._repo.find_exact(query)
+        if exact is not None:
+            return exact
         if len(matches) > 1:
             raise AmbiguousSong(matches)
         return matches[0]
@@ -292,7 +291,7 @@ class GameService:
         Raises:
             NoActiveSessionError: アクティブなセッションが無い場合。
         """
-        session = self.session_manager._require_active()
+        session = self.session_manager.require_active()
         assert session.hidden_song.image_path is not None  # 隠し曲は画像保有曲から抽選済み
         return render_board(
             session.hidden_song.image_path,
@@ -314,7 +313,7 @@ class GameService:
         Args:
             channel: 投稿先チャンネル。
         """
-        session = self.session_manager._require_active()
+        session = self.session_manager.require_active()
         png = self.render_current_board()
         board_msg = await channel.send(
             file=discord.File(BytesIO(png), filename=BOARD_FILENAME)
@@ -327,7 +326,7 @@ class GameService:
 
     async def refresh_board(self) -> None:
         """盤面とお題リストのメッセージを現在の状態へ更新する。"""
-        session = self.session_manager._require_active()
+        session = self.session_manager.require_active()
         png = self.render_current_board()
         if self.board_message is not None:
             await self.board_message.edit(
@@ -350,7 +349,7 @@ class GameService:
         Raises:
             NoActiveSessionError: アクティブなセッションが無い場合。
         """
-        session = self.session_manager._require_active()
+        session = self.session_manager.require_active()
         png = self.render_current_board()
         await archive_channel.send(
             content=format_archive_caption(session),
@@ -388,7 +387,7 @@ class GameService:
             archive_channel: 自動終了時のアーカイブ投稿先。
             now: 開始時刻。残り時間計算の基準。
         """
-        session = self.session_manager._require_active()
+        session = self.session_manager.require_active()
         warning_seconds, end_seconds = timer_delays(
             session, now=now, warning_minutes=self._settings.session_warning_minutes
         )

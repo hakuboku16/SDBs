@@ -5,12 +5,11 @@ import logging
 from pathlib import Path
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
-from discord import app_commands
-
-from src.bot.game_service import GENERIC_ERROR_MESSAGE, GameService
 from src.bot.discord_log_handler import DiscordLogHandler
+from src.bot.game_service import GENERIC_ERROR_MESSAGE, GameService
 from src.core.config import BaseAppSettings
 
 logger = logging.getLogger(__name__)

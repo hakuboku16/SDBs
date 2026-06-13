@@ -90,7 +90,7 @@ class SessionManager:
         Raises:
             NoActiveSessionError: アクティブなセッションが存在しない場合。
         """
-        session = self._require_active()
+        session = self.require_active()
         newly_completed = match_play_report(report, session.topics)
         for topic in newly_completed:
             session.revealed_panels.add(topic.panel_no)
@@ -109,7 +109,7 @@ class SessionManager:
         Raises:
             NoActiveSessionError: アクティブなセッションが存在しない場合。
         """
-        session = self._require_active()
+        session = self.require_active()
         # 隠し曲との一致は解決済み Song の title で判定する。部分一致解決は cog の責務。
         correct = song.title == session.hidden_song.title
         if correct:
@@ -128,7 +128,7 @@ class SessionManager:
         Raises:
             NoActiveSessionError: アクティブなセッションが存在しない場合。
         """
-        session = self._require_active()
+        session = self.require_active()
         return now >= session.ends_at
 
     def remaining(self, now: datetime) -> timedelta:
@@ -143,7 +143,7 @@ class SessionManager:
         Raises:
             NoActiveSessionError: アクティブなセッションが存在しない場合。
         """
-        session = self._require_active()
+        session = self.require_active()
         return session.ends_at - now
 
     def end(self) -> GameSession:
@@ -157,7 +157,7 @@ class SessionManager:
         Raises:
             NoActiveSessionError: アクティブなセッションが存在しない場合。
         """
-        session = self._require_active()
+        session = self.require_active()
         self._session = None
         return session
 
@@ -169,10 +169,10 @@ class SessionManager:
         Raises:
             NoActiveSessionError: アクティブなセッションが存在しない場合。
         """
-        self._require_active()
+        self.require_active()
         self._session = None
 
-    def _require_active(self) -> GameSession:
+    def require_active(self) -> GameSession:
         """アクティブセッションを返す。無ければ送出する。
 
         Returns:

@@ -145,6 +145,22 @@ class SongRepository:
         needle = _normalize(query).casefold()
         return [s for s in self._songs if needle in _normalize(s.title).casefold()]
 
+    def find_exact(self, query: str) -> Song | None:
+        """曲名が完全一致(正規化・大文字小文字無視)する曲を返す。
+
+        Args:
+            query: 照合する曲名。
+
+        Returns:
+            Song | None: 正規化後に曲名が一致する曲。無ければ None。
+        """
+        # 部分一致候補から一意に確定するため、正規化後の完全一致を別途提供する。
+        needle = _normalize(query).casefold()
+        for song in self._songs:
+            if _normalize(song.title).casefold() == needle:
+                return song
+        return None
+
     def songs_with_image(self) -> list[Song]:
         """画像を持つ楽曲のみを返す。
 

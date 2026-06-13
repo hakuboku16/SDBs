@@ -2,21 +2,13 @@ from __future__ import annotations
 
 import discord
 from discord import app_commands
-from discord.ext import commands
 
 from src.bot.client import GameBot
+from src.cogs._base import GameCog
 
 
-class SessionClearCog(commands.Cog):
+class SessionClearCog(GameCog):
     """セッション強制破棄コマンドを提供する cog。"""
-
-    def __init__(self, bot: GameBot) -> None:
-        """bot を保持して初期化する。
-
-        Args:
-            bot: コマンドを提供する GameBot。
-        """
-        self.bot = bot
 
     @app_commands.command(
         name="session_clear", description="セッションをアーカイブせず強制終了する"
@@ -28,10 +20,7 @@ class SessionClearCog(commands.Cog):
             interaction: コマンドのインタラクション。
         """
         game = self.bot.game
-        if game.session is None:
-            await interaction.response.send_message(
-                "進行中のセッションがありません。", ephemeral=True
-            )
+        if await self._require_session_or_reply(interaction) is None:
             return
         await game.clear_session()
         await interaction.response.send_message(

@@ -5,9 +5,9 @@ from datetime import datetime
 
 import discord
 from discord import app_commands
-from discord.ext import commands
 
 from src.bot.client import GameBot
+from src.cogs._base import GameCog
 
 _PANEL_CHOICES = [
     app_commands.Choice(name="4 (2x2)", value=4),
@@ -25,16 +25,8 @@ _MOSAIC_CHOICES = [
 ]
 
 
-class SessionStartCog(commands.Cog):
+class SessionStartCog(GameCog):
     """セッション開始コマンドを提供する cog。"""
-
-    def __init__(self, bot: GameBot) -> None:
-        """bot を保持して初期化する。
-
-        Args:
-            bot: コマンドを提供する GameBot。
-        """
-        self.bot = bot
 
     @app_commands.command(name="session_start", description="新しいセッションを開始する")
     @app_commands.describe(

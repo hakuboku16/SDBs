@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import discord
 from discord import app_commands
-from discord.ext import commands
 
 from src.bot.client import GameBot
-from src.bot.game_service import AmbiguousSong, SongNotFound, format_completed_topics
+from src.bot.game_service import format_completed_topics
+from src.cogs._song_input import SongCommandCog
 from src.game.models import Difficulty, PlayReport
 
 _DIFFICULTY_CHOICES = [
@@ -15,33 +15,8 @@ _DIFFICULTY_CHOICES = [
 ]
 
 
-class SongReportCog(commands.Cog):
+class SongReportCog(SongCommandCog):
     """プレイ申告コマンドを提供する cog。"""
-
-    def __init__(self, bot: GameBot) -> None:
-        """bot を保持して初期化する。
-
-        Args:
-            bot: コマンドを提供する GameBot。
-        """
-        self.bot = bot
-
-    async def _song_autocomplete(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
-        """曲名候補を返す。セッション有無に関わらず全曲を対象にする。
-
-        Args:
-            interaction: オートコンプリートのインタラクション。
-            current: 入力中の文字列。
-
-        Returns:
-            list[app_commands.Choice[str]]: 曲名候補(最大 25 件)。
-        """
-        return [
-            app_commands.Choice(name=title, value=title)
-            for title in self.bot.game.suggest_song_titles(current)
-        ]
 
     @app_commands.command(name="report", description="プレイ結果を申告する")
     @app_commands.describe(
@@ -51,7 +26,7 @@ class SongReportCog(commands.Cog):
         charming="獲得チャーミング数",
     )
     @app_commands.choices(difficulty=_DIFFICULTY_CHOICES)
-    @app_commands.autocomplete(song=_song_autocomplete)
+    @app_commands.autocomplete(song=SongCommandCog._song_autocomplete)
     async def report(
         self,
         interaction: discord.Interaction,
@@ -70,23 +45,10 @@ class SongReportCog(commands.Cog):
             charming: 獲得チャーミング数。
         """
         game = self.bot.game
-        if game.session is None:
-            await interaction.response.send_message(
-                "進行中のセッションがありません。", ephemeral=True
-            )
+        if await self._require_session_or_reply(interaction) is None:
             return
-        try:
-            resolved = game.resolve_song(song)
-        except SongNotFound:
-            await interaction.response.send_message(
-                f"「{song}」に一致する曲が見つかりません。", ephemeral=True
-            )
-            return
-        except AmbiguousSong as exc:
-            names = "、".join(s.title for s in exc.matches[:10])
-            await interaction.response.send_message(
-                f"候補が複数あります。曲名を絞ってください: {names}", ephemeral=True
-            )
+        resolved = await self._resolve_or_reply(interaction, song)
+        if resolved is None:
             return
         await interaction.response.defer(ephemeral=True)
         report = PlayReport(
