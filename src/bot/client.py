@@ -7,6 +7,9 @@ from pathlib import Path
 import discord
 from discord.ext import commands
 
+from discord import app_commands
+
+from src.bot.game_service import GENERIC_ERROR_MESSAGE, GameService
 from src.bot.discord_log_handler import DiscordLogHandler
 from src.core.config import BaseAppSettings
 
@@ -29,10 +32,12 @@ class GameBot(commands.Bot):
         self._settings = settings
         self._log_queue: asyncio.Queue[str] = asyncio.Queue()
         self._log_started = False
+        self.game = GameService.from_settings(settings)
 
     async def setup_hook(self) -> None:
-        """接続前に cogs パッケージ配下の全 cog をロードする。"""
+        """接続前に cog をロードし、アプリコマンド共通エラーハンドラを結線する。"""
         await self._load_cogs()
+        self.tree.on_error = self._on_app_command_error
 
     async def _load_cogs(self) -> None:
         """src/cogs 配下の各モジュールを extension としてロードする。"""
@@ -74,3 +79,21 @@ class GameBot(commands.Bot):
         while True:
             message = await self._log_queue.get()
             await channel.send(f"```\n{message}\n```")
+
+    async def _on_app_command_error(
+        self,
+        interaction: discord.Interaction,
+        error: app_commands.AppCommandError,
+    ) -> None:
+        """アプリコマンドの未捕捉例外を ERROR ログへ記録し、利用者へ汎用応答する。
+
+        Args:
+            interaction: 例外が発生したコマンドのインタラクション。
+            error: 捕捉したアプリコマンド例外。
+        """
+        logger.error("app command error: %s", error, exc_info=error)
+        # 応答済みか未応答かで送出口が異なるため分岐する(二重応答を避ける)。
+        if interaction.response.is_done():
+            await interaction.followup.send(GENERIC_ERROR_MESSAGE, ephemeral=True)
+        else:
+            await interaction.response.send_message(GENERIC_ERROR_MESSAGE, ephemeral=True)

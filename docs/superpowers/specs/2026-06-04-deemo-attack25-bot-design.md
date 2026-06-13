@@ -66,7 +66,8 @@ src/
   - `feat.` キーを持つ曲は featuring。`COMPOSER` が複数要素なら複数作曲者。
 - **PlayReport**: `song, difficulty, combo, charming`(申告 1 件)
 - **Topic**: `panel_no, type, play_condition(プレイ/FC/AC), filter_value, required(set値), progress_kind(COUNT|SUM), progress, completed, description`
-- **GameSession**: `panel_count, grid_size, hidden_song, image_options(rotate角|grayscale|mosaic_px), topics[], revealed_panels(set), correct_answerers(set[user_id]), board_message_ref, topic_message_ref, started_at, ends_at, timer_task`
+- **GameSession**: `panel_count, grid_size, hidden_song, image_options(rotate角|grayscale|mosaic_px), topics[], revealed_panels(set), correct_answerers(set[user_id]), started_at, ends_at`
+  - 実装注記(M3以降): `game/` を Discord 非依存に保つため、`board_message_ref`/`topic_message_ref`/`timer_task` は GameSession に持たせず、bot 層の `GameService`(`src/bot/game_service.py`)が保持する。
 
 ## お題エンジン(本ゲームの核)
 
