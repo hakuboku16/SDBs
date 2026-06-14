@@ -42,7 +42,8 @@ class GameBot(commands.Bot):
         """src/cogs 配下の各モジュールを extension としてロードする。"""
         cogs_dir = Path(__file__).resolve().parent.parent / "cogs"
         for path in sorted(cogs_dir.glob("*.py")):
-            if path.stem == "__init__":
+            # アンダースコア始まりは extension ではない内部用モジュール(基底クラス・ヘルパー)。
+            if path.stem.startswith("_"):
                 continue
             await self.load_extension(f"{_COGS_PACKAGE}.{path.stem}")
 
