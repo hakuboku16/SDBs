@@ -212,6 +212,31 @@ wheels = [
 ]
 
 [[package]]
+name = "deemo-attack25-bot"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "discord-py" },
+    { name = "pillow" },
+    { name = "pydantic-settings" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "discord-py", specifier = ">=2.4" },
+    { name = "pillow", specifier = ">=12.2.0" },
+    { name = "pydantic-settings", specifier = ">=2.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.0" }]
+
+[[package]]
 name = "discord-py"
 version = "2.7.1"
 source = { registry = "https://pypi.org/simple" }
@@ -748,31 +773,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/82/ed/0301aeeac3e5353ef
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0b/d7/1959b9648791274998a9c3526f6d0ec8fd2233e4d4acce81bbae76b44b2a/python_dotenv-1.2.2-py3-none-any.whl", hash = "sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a", size = 22101, upload-time = "2026-03-01T16:00:25.09Z" },
 ]
-
-[[package]]
-name = "template"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "discord-py" },
-    { name = "pillow" },
-    { name = "pydantic-settings" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "discord-py", specifier = ">=2.4" },
-    { name = "pillow", specifier = ">=12.2.0" },
-    { name = "pydantic-settings", specifier = ">=2.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.0" }]
 
 [[package]]
 name = "typing-extensions"

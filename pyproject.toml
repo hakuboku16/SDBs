@@ -1,7 +1,7 @@
 [project]
-name = "template"
+name = "deemo-attack25-bot"
 version = "0.1.0"
-description = "Python project template with common logging/config foundation"
+description = "DEEMO x Attack25 style quiz Discord bot"
 requires-python = ">=3.12"
 dependencies = [
     "discord-py>=2.4",
