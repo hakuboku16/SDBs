@@ -60,10 +60,13 @@ class SongReportCog(SongCommandCog):
         newly_completed = game.session_manager.apply_report(report)
         await game.refresh_board()
         if newly_completed:
+            channel = await self._require_command_channel_or_reply(interaction)
+            if channel is None:
+                return
             embed = discord.Embed(
                 title="お題達成", description=format_completed_topics(newly_completed)
             )
-            await interaction.channel.send(embed=embed)
+            await channel.send(embed=embed)
             await interaction.followup.send("申告を反映しました。", ephemeral=True)
         else:
             await interaction.followup.send(

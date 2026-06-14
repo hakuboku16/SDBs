@@ -39,3 +39,44 @@ class GameCog(commands.Cog):
                 "進行中のセッションがありません。", ephemeral=True
             )
         return session
+
+    async def _require_command_channel_or_reply(
+        self, interaction: discord.Interaction
+    ) -> discord.abc.Messageable | None:
+        """コマンド実行チャンネルを送信可能チャンネルとして返す。
+
+        Args:
+            interaction: コマンドのインタラクション。defer 済みであること。
+
+        Returns:
+            discord.abc.Messageable | None: 送信可能な実行チャンネル。
+                取得できない/送信不可なら ephemeral 応答して None を返す。
+        """
+        channel = interaction.channel
+        if isinstance(channel, discord.abc.Messageable):
+            return channel
+        await interaction.followup.send(
+            "このチャンネルには投稿できません。", ephemeral=True
+        )
+        return None
+
+    async def _require_archive_channel_or_reply(
+        self, interaction: discord.Interaction
+    ) -> discord.abc.Messageable | None:
+        """設定のアーカイブ用チャンネルを送信可能チャンネルとして返す。
+
+        Args:
+            interaction: コマンドのインタラクション。defer 済みであること。
+
+        Returns:
+            discord.abc.Messageable | None: 送信可能なアーカイブチャンネル。
+                未解決/送信不可なら ephemeral 応答して None を返す。
+        """
+        channel = self.bot.get_channel(self.bot.game.settings.archive_channel_id)
+        if isinstance(channel, discord.abc.Messageable):
+            return channel
+        await interaction.followup.send(
+            "アーカイブ用チャンネルを取得できませんでした。設定を確認してください。",
+            ephemeral=True,
+        )
+        return None

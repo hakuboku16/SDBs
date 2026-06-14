@@ -23,7 +23,9 @@ class SessionEndCog(GameCog):
         if await self._require_session_or_reply(interaction) is None:
             return
         await interaction.response.defer(ephemeral=True)
-        archive_channel = self.bot.get_channel(game.settings.archive_channel_id)
+        archive_channel = await self._require_archive_channel_or_reply(interaction)
+        if archive_channel is None:
+            return
         game.cancel_timer()
         await game.end_session(archive_channel)
         await interaction.followup.send("セッションを終了しました。", ephemeral=True)

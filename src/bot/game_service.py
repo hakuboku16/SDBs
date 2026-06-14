@@ -12,12 +12,14 @@ from src.core.config import BaseAppSettings
 from src.game.board import render_board
 from src.game.image_options import resolve_image_options
 from src.game.models import GameSession, Song, Topic
-from src.game.session_manager import NoActiveSessionError, SessionManager
+from src.game.session_manager import SessionManager
 from src.game.song_repository import SongRepository
 from src.game.topic_catalog import TopicTemplate, load_topics
 from src.game.topic_generator import generate_topics
 
-GENERIC_ERROR_MESSAGE = "コマンドの実行中にエラーが発生しました。しばらくして再度お試しください。"
+GENERIC_ERROR_MESSAGE = (
+    "コマンドの実行中にエラーが発生しました。しばらくして再度お試しください。"
+)
 BOARD_FILENAME = "board.png"
 
 
@@ -292,7 +294,9 @@ class GameService:
             NoActiveSessionError: アクティブなセッションが無い場合。
         """
         session = self.session_manager.require_active()
-        assert session.hidden_song.image_path is not None  # 隠し曲は画像保有曲から抽選済み
+        assert (
+            session.hidden_song.image_path is not None
+        )  # 隠し曲は画像保有曲から抽選済み
         return render_board(
             session.hidden_song.image_path,
             grid_size=session.grid_size,

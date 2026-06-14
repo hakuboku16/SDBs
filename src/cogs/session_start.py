@@ -60,6 +60,12 @@ class SessionStartCog(GameCog):
             )
             return
         await interaction.response.defer(ephemeral=True)
+        channel = await self._require_command_channel_or_reply(interaction)
+        if channel is None:
+            return
+        archive_channel = await self._require_archive_channel_or_reply(interaction)
+        if archive_channel is None:
+            return
         panel_count = panels.value if panels is not None else 9
         mosaic_px = mosaic.value if mosaic is not None and mosaic.value else None
         game.start_session(
@@ -69,8 +75,7 @@ class SessionStartCog(GameCog):
             mosaic_px=mosaic_px,
             now=datetime.now(),
         )
-        await game.post_session_messages(interaction.channel)
-        archive_channel = self.bot.get_channel(game.settings.archive_channel_id)
+        await game.post_session_messages(channel)
         game.timer_task = asyncio.create_task(
             game.run_timer(archive_channel, now=datetime.now())
         )
