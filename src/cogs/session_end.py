@@ -29,7 +29,9 @@ class SessionEndCog(GameCog):
             return
         game.cancel_timer()
         await game.end_session(archive_channel)
-        await interaction.followup.send(embed=embeds.success("セッションを終了しました。"), ephemeral=True)
+        await interaction.followup.send(
+            embed=embeds.success("セッションを終了しました。"), ephemeral=True
+        )
 
 
 async def setup(bot: GameBot) -> None:
