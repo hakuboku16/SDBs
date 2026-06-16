@@ -3,6 +3,7 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 
+from src.bot import embeds
 from src.bot.game_service import AmbiguousSong, SongNotFound
 from src.cogs._base import GameCog
 from src.game.models import Song
@@ -49,11 +50,15 @@ class SongCommandCog(GameCog):
             return self.bot.game.resolve_song(song)
         except SongNotFound:
             await interaction.response.send_message(
-                f"「{song}」に一致する曲が見つかりません。", ephemeral=True
+                embed=embeds.error(f"「{song}」に一致する曲が見つかりません。"),
+                ephemeral=True,
             )
         except AmbiguousSong as exc:
             names = "、".join(s.title for s in exc.matches[:10])
             await interaction.response.send_message(
-                f"候補が複数あります。曲名を絞ってください: {names}", ephemeral=True
+                embed=embeds.warning(
+                    f"候補が複数あります。曲名を絞ってください: {names}"
+                ),
+                ephemeral=True,
             )
         return None
