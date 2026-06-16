@@ -3,6 +3,7 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 
+from src.bot import embeds
 from src.bot.client import GameBot
 from src.bot.game_service import format_completed_topics
 from src.cogs._song_input import SongCommandCog
@@ -63,14 +64,18 @@ class SongReportCog(SongCommandCog):
             channel = await self._require_command_channel_or_reply(interaction)
             if channel is None:
                 return
-            embed = discord.Embed(
-                title="お題達成", description=format_completed_topics(newly_completed)
+            await channel.send(
+                embed=embeds.success(
+                    format_completed_topics(newly_completed), title="お題達成"
+                )
             )
-            await channel.send(embed=embed)
-            await interaction.followup.send("申告を反映しました。", ephemeral=True)
+            await interaction.followup.send(
+                embed=embeds.success("申告を反映しました。"), ephemeral=True
+            )
         else:
             await interaction.followup.send(
-                "申告を反映しました。達成したお題はありません。", ephemeral=True
+                embed=embeds.info("申告を反映しました。達成したお題はありません。"),
+                ephemeral=True,
             )
 
 
