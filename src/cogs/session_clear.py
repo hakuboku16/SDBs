@@ -3,6 +3,7 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 
+from src.bot import embeds
 from src.bot.client import GameBot
 from src.cogs._base import GameCog
 
@@ -24,7 +25,7 @@ class SessionClearCog(GameCog):
             return
         await game.clear_session()
         await interaction.response.send_message(
-            "セッションを破棄しました。", ephemeral=True
+            embed=embeds.success("セッションを破棄しました。"), ephemeral=True
         )
 
 
