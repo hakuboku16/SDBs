@@ -8,6 +8,7 @@ from pathlib import Path
 
 import discord
 
+from src.bot import embeds
 from src.core.config import BaseAppSettings
 from src.game.board import render_board
 from src.game.image_options import resolve_image_options
@@ -21,6 +22,9 @@ GENERIC_ERROR_MESSAGE = (
     "コマンドの実行中にエラーが発生しました。しばらくして再度お試しください。"
 )
 BOARD_FILENAME = "board.png"
+SESSION_EMBED_TITLE = "盤面とお題"
+ARCHIVE_EMBED_TITLE = "セッション終了"
+WARNING_EMBED_TITLE = "終了予告"
 
 
 class SongResolutionError(Exception):
@@ -162,8 +166,8 @@ class GameService:
         self._rng = rng or random.Random()
         self.session_manager = SessionManager()
         # Discord 側状態。投稿・タイマー開始時に実体を入れる。
-        self.board_message: discord.Message | None = None
-        self.topic_message: discord.Message | None = None
+        # 盤面画像とお題リストを1つの Embed メッセージにまとめて保持する。
+        self.session_message: discord.Message | None = None
         self.timer_task: asyncio.Task[None] | None = None
 
     @classmethod
@@ -304,6 +308,22 @@ class GameService:
             options=session.image_options,
         )
 
+    def _build_session_embed(self) -> discord.Embed:
+        """盤面画像とお題リストを1つにまとめた Embed を組み立てる。
+
+        Returns:
+            discord.Embed: お題リストを本文に持ち、盤面画像を添付参照する青色 Embed。
+
+        Raises:
+            NoActiveSessionError: アクティブなセッションが無い場合。
+        """
+        session = self.session_manager.require_active()
+        embed = embeds.info(
+            format_topic_list(session.topics), title=SESSION_EMBED_TITLE
+        )
+        embed.set_image(url=f"attachment://{BOARD_FILENAME}")
+        return embed
+
     def cancel_timer(self) -> None:
         """進行中のタイマータスクがあれば取り消す。"""
         # 手動終了/強制クリア時に自動終了タイマーが二重発火しないよう取り消す。
@@ -312,32 +332,28 @@ class GameService:
             self.timer_task = None
 
     async def post_session_messages(self, channel: discord.abc.Messageable) -> None:
-        """盤面とお題リストを投稿してピン留めし、参照を保持する。
+        """盤面とお題リストを1つの Embed として投稿しピン留めし、参照を保持する。
 
         Args:
             channel: 投稿先チャンネル。
         """
-        session = self.session_manager.require_active()
         png = self.render_current_board()
-        board_msg = await channel.send(
-            file=discord.File(BytesIO(png), filename=BOARD_FILENAME)
+        message = await channel.send(
+            embed=self._build_session_embed(),
+            file=discord.File(BytesIO(png), filename=BOARD_FILENAME),
         )
-        topic_msg = await channel.send(format_topic_list(session.topics))
-        await board_msg.pin()
-        await topic_msg.pin()
-        self.board_message = board_msg
-        self.topic_message = topic_msg
+        await message.pin()
+        self.session_message = message
 
     async def refresh_board(self) -> None:
-        """盤面とお題リストのメッセージを現在の状態へ更新する。"""
-        session = self.session_manager.require_active()
+        """盤面画像とお題リストの Embed メッセージを現在の状態へ更新する。"""
+        if self.session_message is None:
+            return
         png = self.render_current_board()
-        if self.board_message is not None:
-            await self.board_message.edit(
-                attachments=[discord.File(BytesIO(png), filename=BOARD_FILENAME)]
-            )
-        if self.topic_message is not None:
-            await self.topic_message.edit(content=format_topic_list(session.topics))
+        await self.session_message.edit(
+            embed=self._build_session_embed(),
+            attachments=[discord.File(BytesIO(png), filename=BOARD_FILENAME)],
+        )
 
     async def end_session(
         self, archive_channel: discord.abc.Messageable
@@ -355,8 +371,12 @@ class GameService:
         """
         session = self.session_manager.require_active()
         png = self.render_current_board()
+        archive_embed = embeds.neutral(
+            format_archive_caption(session), title=ARCHIVE_EMBED_TITLE
+        )
+        archive_embed.set_image(url=f"attachment://{BOARD_FILENAME}")
         await archive_channel.send(
-            content=format_archive_caption(session),
+            embed=archive_embed,
             file=discord.File(BytesIO(png), filename=BOARD_FILENAME),
         )
         await self._unpin_messages()
@@ -375,12 +395,10 @@ class GameService:
         self.session_manager.clear()
 
     async def _unpin_messages(self) -> None:
-        """盤面・お題リストのピンを解除し、参照を落とす。"""
-        for message in (self.board_message, self.topic_message):
-            if message is not None:
-                await message.unpin()
-        self.board_message = None
-        self.topic_message = None
+        """盤面+お題メッセージのピンを解除し、参照を落とす。"""
+        if self.session_message is not None:
+            await self.session_message.unpin()
+        self.session_message = None
 
     async def run_timer(
         self, archive_channel: discord.abc.Messageable, *, now: datetime
@@ -397,9 +415,12 @@ class GameService:
         )
         if warning_seconds > 0:
             await asyncio.sleep(warning_seconds)
-        if self.board_message is not None:
-            await self.board_message.channel.send(
-                f"残り{self._settings.session_warning_minutes}分です。"
+        if self.session_message is not None:
+            await self.session_message.channel.send(
+                embed=embeds.warning(
+                    f"残り{self._settings.session_warning_minutes}分です。",
+                    title=WARNING_EMBED_TITLE,
+                )
             )
         await asyncio.sleep(max(end_seconds - max(warning_seconds, 0.0), 0.0))
         await self.end_session(archive_channel)
