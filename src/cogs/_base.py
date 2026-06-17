@@ -3,6 +3,7 @@ from __future__ import annotations
 import discord
 from discord.ext import commands
 
+from src.bot import embeds
 from src.bot.client import GameBot
 from src.game.models import GameSession
 
@@ -36,7 +37,7 @@ class GameCog(commands.Cog):
         session = self.bot.game.session
         if session is None:
             await interaction.response.send_message(
-                "進行中のセッションがありません。", ephemeral=True
+                embed=embeds.error("進行中のセッションがありません。"), ephemeral=True
             )
         return session
 
@@ -56,7 +57,7 @@ class GameCog(commands.Cog):
         if isinstance(channel, discord.abc.Messageable):
             return channel
         await interaction.followup.send(
-            "このチャンネルには投稿できません。", ephemeral=True
+            embed=embeds.error("このチャンネルには投稿できません。"), ephemeral=True
         )
         return None
 
@@ -76,7 +77,9 @@ class GameCog(commands.Cog):
         if isinstance(channel, discord.abc.Messageable):
             return channel
         await interaction.followup.send(
-            "アーカイブ用チャンネルを取得できませんでした。設定を確認してください。",
+            embed=embeds.error(
+                "アーカイブ用チャンネルを取得できませんでした。設定を確認してください。"
+            ),
             ephemeral=True,
         )
         return None

@@ -3,6 +3,7 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 
+from src.bot import embeds
 from src.bot.client import GameBot
 from src.cogs._song_input import SongCommandCog
 
@@ -27,9 +28,8 @@ class AnswerCog(SongCommandCog):
         if resolved is None:
             return
         correct = game.session_manager.record_answer(interaction.user.id, resolved)
-        await interaction.response.send_message(
-            "正解" if correct else "不正解", ephemeral=True
-        )
+        embed = embeds.success("正解") if correct else embeds.error("不正解")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 async def setup(bot: GameBot) -> None:

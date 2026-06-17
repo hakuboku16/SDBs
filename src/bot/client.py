@@ -8,6 +8,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.bot import embeds
 from src.bot.discord_log_handler import DiscordLogHandler
 from src.bot.game_service import GENERIC_ERROR_MESSAGE, GameService
 from src.core.config import BaseAppSettings
@@ -94,6 +95,10 @@ class GameBot(commands.Bot):
         logger.error("app command error: %s", error, exc_info=error)
         # 応答済みか未応答かで送出口が異なるため分岐する(二重応答を避ける)。
         if interaction.response.is_done():
-            await interaction.followup.send(GENERIC_ERROR_MESSAGE, ephemeral=True)
+            await interaction.followup.send(
+                embed=embeds.error(GENERIC_ERROR_MESSAGE), ephemeral=True
+            )
         else:
-            await interaction.response.send_message(GENERIC_ERROR_MESSAGE, ephemeral=True)
+            await interaction.response.send_message(
+                embed=embeds.error(GENERIC_ERROR_MESSAGE), ephemeral=True
+            )

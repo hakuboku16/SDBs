@@ -3,6 +3,7 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 
+from src.bot import embeds
 from src.bot.client import GameBot
 from src.cogs._base import GameCog
 
@@ -28,7 +29,9 @@ class SessionEndCog(GameCog):
             return
         game.cancel_timer()
         await game.end_session(archive_channel)
-        await interaction.followup.send("セッションを終了しました。", ephemeral=True)
+        await interaction.followup.send(
+            embed=embeds.success("セッションを終了しました。"), ephemeral=True
+        )
 
 
 async def setup(bot: GameBot) -> None:

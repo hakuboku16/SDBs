@@ -6,6 +6,7 @@ from datetime import datetime
 import discord
 from discord import app_commands
 
+from src.bot import embeds
 from src.bot.client import GameBot
 from src.cogs._base import GameCog
 
@@ -56,7 +57,7 @@ class SessionStartCog(GameCog):
         game = self.bot.game
         if game.session is not None:
             await interaction.response.send_message(
-                "既にセッションが進行中です。", ephemeral=True
+                embed=embeds.warning("既にセッションが進行中です。"), ephemeral=True
             )
             return
         await interaction.response.defer(ephemeral=True)
@@ -79,7 +80,7 @@ class SessionStartCog(GameCog):
         game.timer_task = asyncio.create_task(
             game.run_timer(archive_channel, now=datetime.now())
         )
-        await interaction.followup.send("セッションを開始しました。", ephemeral=True)
+        await interaction.followup.send(embed=embeds.success("セッションを開始しました。"), ephemeral=True)
 
 
 async def setup(bot: GameBot) -> None:

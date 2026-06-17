@@ -6,6 +6,7 @@ from io import BytesIO
 import discord
 from discord import app_commands
 
+from src.bot import embeds
 from src.bot.client import GameBot
 from src.bot.game_service import BOARD_FILENAME, format_progress_text
 from src.cogs._base import GameCog
@@ -28,8 +29,10 @@ class SessionProgressCog(GameCog):
         await interaction.response.defer(ephemeral=True)
         remaining = game.session_manager.remaining(datetime.now())
         png = game.render_current_board()
+        embed = embeds.info(format_progress_text(session, remaining))
+        embed.set_image(url=f"attachment://{BOARD_FILENAME}")
         await interaction.followup.send(
-            content=format_progress_text(session, remaining),
+            embed=embed,
             file=discord.File(BytesIO(png), filename=BOARD_FILENAME),
             ephemeral=True,
         )
