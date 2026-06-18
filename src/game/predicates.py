@@ -189,6 +189,7 @@ def _level(value: FilterValue) -> Predicate:
 
     def pred(song: Song, difficulty: Difficulty) -> bool:
         """指定レベルの譜面を持つか判定する。"""
+        # レベルが文字列(level=None)の Extra 譜面は数値比較できないため一致しない。
         return any(chart.level == level for chart in song.charts.values())
 
     return pred

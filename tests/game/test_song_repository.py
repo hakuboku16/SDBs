@@ -1,6 +1,7 @@
+import json
 from pathlib import Path
 
-from src.game.models import Difficulty
+from src.game.models import Chart, Difficulty
 from src.game.song_repository import SongRepository, load_songs
 
 
@@ -39,6 +40,28 @@ def test_charts_built_and_missing_difficulty_skipped(
     saika = by_title["Saika"]
     assert Difficulty.NORMAL not in saika.charts
     assert set(saika.charts) == {Difficulty.EASY, Difficulty.HARD}
+
+
+def test_extra_chart_with_string_level_is_parsed_as_none(tmp_path: Path) -> None:
+    # Extra 譜面はレベルが文字列の曲があり、数値化できない場合は level=None で取り込む。
+    data = {
+        "Story": {
+            "Book": {
+                "Foo": {
+                    "VERSION": "1.0",
+                    "LEVEL": {"Hard": 8, "Extra": "L"},
+                    "NOTES": {"Hard": 500, "Extra": 900},
+                    "TIME": 120,
+                    "COMPOSER": ["X"],
+                }
+            }
+        }
+    }
+    songs_path = tmp_path / "all_songs.json"
+    songs_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    foo = load_songs(songs_path, tmp_path / "images")[0]
+    assert foo.charts[Difficulty.EXTRA] == Chart(level=None, notes=900)
+    assert foo.charts[Difficulty.HARD].level == 8
 
 
 def test_image_resolution(song_assets: tuple[Path, Path]) -> None:

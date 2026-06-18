@@ -5,7 +5,7 @@ from discord import app_commands
 
 from src.bot import embeds
 from src.bot.client import GameBot
-from src.bot.game_service import format_completed_topics
+from src.bot.game_service import format_panel_list
 from src.cogs._song_input import SongCommandCog
 from src.game.models import Difficulty, PlayReport
 
@@ -13,13 +13,14 @@ _DIFFICULTY_CHOICES = [
     app_commands.Choice(name="Easy", value="Easy"),
     app_commands.Choice(name="Normal", value="Normal"),
     app_commands.Choice(name="Hard", value="Hard"),
+    app_commands.Choice(name="Extra", value="Extra"),
 ]
 
 
 class SongReportCog(SongCommandCog):
     """プレイ申告コマンドを提供する cog。"""
 
-    @app_commands.command(name="report", description="プレイ結果を申告する")
+    @app_commands.command(name="play", description="プレイ結果を申告する")
     @app_commands.describe(
         song="曲名(部分一致)",
         difficulty="難易度",
@@ -28,7 +29,7 @@ class SongReportCog(SongCommandCog):
     )
     @app_commands.choices(difficulty=_DIFFICULTY_CHOICES)
     @app_commands.autocomplete(song=SongCommandCog._song_autocomplete)
-    async def report(
+    async def play(
         self,
         interaction: discord.Interaction,
         song: str,
@@ -36,7 +37,7 @@ class SongReportCog(SongCommandCog):
         combo: int,
         charming: int,
     ) -> None:
-        """申告を全お題へ照合し、達成パネルを開示して公開表示する。
+        """申告を全お題へ照合し、該当パネルを開示して公開表示する。
 
         Args:
             interaction: コマンドのインタラクション。
@@ -51,32 +52,39 @@ class SongReportCog(SongCommandCog):
         resolved = await self._resolve_or_reply(interaction, song)
         if resolved is None:
             return
-        await interaction.response.defer(ephemeral=True)
+        chart = resolved.charts.get(Difficulty(difficulty.value))
+        if chart is None:
+            await interaction.response.send_message(
+                embed=embeds.warning(
+                    f"「{resolved.title}」に {difficulty.value} の譜面がありません。"
+                ),
+                ephemeral=True,
+            )
+            return
+        if combo > chart.notes or charming > chart.notes:
+            await interaction.response.send_message(
+                embed=embeds.warning(
+                    f"入力されたノーツ数が {resolved.title} の {difficulty.value}"
+                    f"(総ノーツ数 {chart.notes})を上回っています。"
+                ),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.defer()
         report = PlayReport(
             song=resolved,
             difficulty=Difficulty(difficulty.value),
             combo=combo,
             charming=charming,
         )
-        newly_completed = game.session_manager.apply_report(report)
+        applied = game.session_manager.apply_report(report)
         await game.refresh_board()
-        if newly_completed:
-            channel = await self._require_command_channel_or_reply(interaction)
-            if channel is None:
-                return
-            await channel.send(
-                embed=embeds.success(
-                    format_completed_topics(newly_completed), title="お題達成"
-                )
-            )
-            await interaction.followup.send(
-                embed=embeds.success("申告を反映しました。"), ephemeral=True
-            )
-        else:
-            await interaction.followup.send(
-                embed=embeds.info("申告を反映しました。達成したお題はありません。"),
-                ephemeral=True,
-            )
+        body = (
+            format_panel_list(applied) if applied else "進捗のあったタスクはありません。"
+        )
+        await interaction.followup.send(
+            embed=embeds.success(body, title=f"▶ プレイ記録を追加: {resolved.title}")
+        )
 
 
 async def setup(bot: GameBot) -> None:

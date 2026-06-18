@@ -12,7 +12,7 @@ from src.game.models import Song
 class SongCommandCog(GameCog):
     """曲名のオートコンプリートと部分一致解決を共有する cog 基底。
 
-    曲名を受け取る cog(answer/report)はこれを継承し、候補提示と解決失敗時の
+    曲名を受け取る cog(answer/play)はこれを継承し、候補提示と解決失敗時の
     ephemeral 応答を共通化する。app_commands.autocomplete のコールバックは
     第 1 引数に Cog を要求するため、mixin ではなく Cog 基底として提供する。
     """

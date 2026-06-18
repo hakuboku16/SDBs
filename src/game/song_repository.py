@@ -56,13 +56,16 @@ def _parse_song(
     Returns:
         Song: 構築した楽曲データ。画像が無ければ image_path は None。
     """
-    levels = cast(dict[str, int], node["LEVEL"])
+    levels = cast(dict[str, object], node["LEVEL"])
     notes = cast(dict[str, int], node["NOTES"])
     charts: dict[Difficulty, Chart] = {}
     for difficulty in Difficulty:
         name = difficulty.value
         if name in levels and name in notes:
-            charts[difficulty] = Chart(level=levels[name], notes=notes[name])
+            # Extra 譜面はレベルが文字列の曲があるため、数値以外は None として取り込む。
+            raw_level = levels[name]
+            level = raw_level if isinstance(raw_level, int) else None
+            charts[difficulty] = Chart(level=level, notes=notes[name])
     return Song(
         title=title,
         shelf=shelf,

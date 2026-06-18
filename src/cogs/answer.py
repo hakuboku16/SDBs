@@ -28,7 +28,16 @@ class AnswerCog(SongCommandCog):
         if resolved is None:
             return
         correct = game.session_manager.record_answer(interaction.user.id, resolved)
-        embed = embeds.success("正解") if correct else embeds.error("不正解")
+        if correct:
+            embed = embeds.success(
+                f"**正解:** {resolved.title}\n\nおめでとうございます！",
+                title="🎉 正解です！",
+            )
+        else:
+            embed = embeds.error(
+                f"**あなたの回答:** {resolved.title}\n\n残念！もう一度チャレンジしてください。",
+                title="❌ 不正解です",
+            )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 

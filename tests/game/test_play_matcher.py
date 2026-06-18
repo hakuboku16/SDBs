@@ -69,7 +69,8 @@ def _topic(
 
 def test_count_increments_on_filter_match() -> None:
     topic = _topic(required=2)
-    assert apply_report(_report(), [topic]) == []
+    # 進捗が増えれば未達成でも該当お題として返す。
+    assert apply_report(_report(), [topic]) == [topic]
     assert topic.progress == 1 and topic.completed is False
     newly = apply_report(_report(), [topic])
     assert topic.progress == 2 and topic.completed is True
@@ -155,6 +156,23 @@ def test_sum_respects_play_condition() -> None:
     # combo == notes → level を累積
     newly = apply_report(_report(combo=485), [topic])
     assert topic.progress == 8 and topic.completed is True and newly == [topic]
+
+
+def test_level_total_skips_chart_with_none_level() -> None:
+    # Extra 譜面のレベルが文字列(None)だと加算できないため進捗を増やさずスキップする。
+    song = _song(charts={Difficulty.EXTRA: Chart(level=None, notes=900)})
+    topic = _topic(
+        topic_type=TopicType.LEVEL_TOTAL,
+        filter_value=None,
+        required=8,
+        progress_kind=ProgressKind.SUM,
+    )
+    applied = apply_report(
+        _report(song=song, difficulty=Difficulty.EXTRA, combo=900, charming=900),
+        [topic],
+    )
+    assert applied == []
+    assert topic.progress == 0 and topic.completed is False
 
 
 def test_invalid_difficulty_is_skipped() -> None:

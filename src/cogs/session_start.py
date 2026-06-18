@@ -8,6 +8,7 @@ from discord import app_commands
 
 from src.bot import embeds
 from src.bot.client import GameBot
+from src.bot.game_service import MOSAIC_OPTIONS, mosaic_choice_label
 from src.cogs._base import GameCog
 
 _PANEL_CHOICES = [
@@ -16,13 +17,10 @@ _PANEL_CHOICES = [
     app_commands.Choice(name="16 (4x4)", value=16),
     app_commands.Choice(name="25 (5x5)", value=25),
 ]
-# value=0 は「しない」を表し、cog で None(モザイクなし)へ変換する。
+# value=0 は「なし」を表し、cog で None(モザイクなし)へ変換する。ラベルには実効解像度 px を併記する。
 _MOSAIC_CHOICES = [
-    app_commands.Choice(name="しない", value=0),
-    app_commands.Choice(name="弱", value=150),
-    app_commands.Choice(name="中", value=90),
-    app_commands.Choice(name="強", value=45),
-    app_commands.Choice(name="最強", value=27),
+    app_commands.Choice(name=mosaic_choice_label(name, px), value=px)
+    for name, px in MOSAIC_OPTIONS
 ]
 
 

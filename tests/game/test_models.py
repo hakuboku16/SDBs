@@ -93,7 +93,7 @@ def test_game_session_defaults_and_grid_size() -> None:
     )
     assert session.grid_size == 3
     assert session.revealed_panels == set()
-    assert session.correct_answerers == set()
+    assert session.correct_answerers == []
 
 
 def test_game_session_grid_size_for_each_panel_count() -> None:

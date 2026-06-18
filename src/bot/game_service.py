@@ -10,7 +10,7 @@ import discord
 
 from src.bot import embeds
 from src.core.config import BaseAppSettings
-from src.game.board import render_board
+from src.game.board import CANVAS_SIZE, render_board
 from src.game.image_options import resolve_image_options
 from src.game.models import GameSession, Song, Topic
 from src.game.session_manager import SessionManager
@@ -22,9 +22,37 @@ GENERIC_ERROR_MESSAGE = (
     "コマンドの実行中にエラーが発生しました。しばらくして再度お試しください。"
 )
 BOARD_FILENAME = "board.png"
-SESSION_EMBED_TITLE = "盤面とお題"
-ARCHIVE_EMBED_TITLE = "セッション終了"
-WARNING_EMBED_TITLE = "終了予告"
+SESSION_EMBED_TITLE = "🎯 セッション開始"
+ARCHIVE_EMBED_TITLE = "🎵 セッション結果"
+SESSION_END_TITLE = "⏱️ 制限時間終了"
+SESSION_END_MESSAGE = (
+    "セッションの制限時間が終了しました。\n結果は別チャンネルに送信されます。"
+)
+
+# モザイク強度の選択肢。value は縮小先 px(0=なし)。表示は実効解像度 px を併記する。
+MOSAIC_OPTIONS: list[tuple[str, int]] = [
+    ("なし", 0),
+    ("弱", 150),
+    ("中", 90),
+    ("強", 45),
+    ("最強", 27),
+]
+_MOSAIC_NAME_BY_PX = {px: name for name, px in MOSAIC_OPTIONS}
+
+
+def mosaic_choice_label(name: str, px: int) -> str:
+    """モザイク選択肢の表示ラベルを「名前 (実効解像度px)」で組み立てる。
+
+    Args:
+        name: 強度の表示名(なし/弱/中/強/最強)。
+        px: 縮小先 px。0 は縮小なし(なし)を表す。
+
+    Returns:
+        str: 「なし (300px)」のように実効解像度を併記したラベル。
+    """
+    # px=0(なし)は縮小しないため、実効解像度は盤面キャンバスの一辺になる。
+    effective = px if px else CANVAS_SIZE
+    return f"{name} ({effective}px)"
 
 
 class SongResolutionError(Exception):
@@ -76,33 +104,66 @@ def format_topic_list(topics: list[Topic]) -> str:
     return "\n".join(lines)
 
 
+def format_session_options(session: GameSession) -> str:
+    """お題生成オプションを盤面 Embed 用に整形する。
+
+    Args:
+        session: 表示対象のセッション。
+
+    Returns:
+        str: パネル数・回転・グレースケール・モザイクを箇条書きにした文字列。
+    """
+    options = session.image_options
+    rotate = "有効" if options.rotate is not None else "無効"
+    grayscale = "有効" if options.grayscale else "無効"
+    px = options.mosaic_px or 0
+    mosaic = mosaic_choice_label(_MOSAIC_NAME_BY_PX[px], px)
+    return "\n".join(
+        [
+            f"・パネル数:{session.panel_count}",
+            f"・回転:{rotate}",
+            f"・グレースケール:{grayscale}",
+            f"・モザイク:{mosaic}",
+        ]
+    )
+
+
+def format_panel_list(topics: list[Topic]) -> str:
+    """お題をパネル番号順に達成マーク付きで整形する。
+
+    Args:
+        topics: 表示するお題群。
+
+    Returns:
+        str: パネル番号昇順に「{✅/⬜} パネル N (progress/required)」と説明を
+            改行で並べた文字列。達成済みは ✅、未達成は ⬜ を付ける。
+    """
+    lines: list[str] = []
+    for topic in sorted(topics, key=lambda t: t.panel_no):
+        mark = "✅" if topic.completed else "⬜"
+        lines.append(
+            f"{mark} **パネル {topic.panel_no} ({topic.progress}/{topic.required})**"
+        )
+        lines.append(topic.description)
+    return "\n".join(lines)
+
+
 def format_archive_caption(session: GameSession) -> str:
-    """セッション終了アーカイブ用の文言を生成する。
+    """セッション結果アーカイブ用の文言を生成する。
 
     Args:
         session: 終了するセッション。
 
     Returns:
-        str: 隠し曲名をネタバレ記法で隠し、正解者をメンション列挙した文言。
+        str: 楽曲名+パック名(book)をネタバレ記法で隠し、正解者を正解順で
+            列挙した文言。正解者がいなければ「正解者なし」を表示する。
     """
-    answerers = sorted(session.correct_answerers)
-    mentions = "、".join(f"<@{uid}>" for uid in answerers) if answerers else "なし"
-    return f"隠し曲: ||{session.hidden_song.title}||\n正解者: {mentions}"
-
-
-def format_completed_topics(topics: list[Topic]) -> str:
-    """新規達成お題を公開表示用に整形する。
-
-    Args:
-        topics: 新規達成したお題群。
-
-    Returns:
-        str: パネル番号昇順に「パネルN: 説明」を改行連結した文字列。
-    """
-    return "\n".join(
-        f"パネル{t.panel_no}: {t.description}"
-        for t in sorted(topics, key=lambda t: t.panel_no)
-    )
+    song = session.hidden_song
+    if session.correct_answerers:
+        answerers = "\n".join(f"<@{uid}>" for uid in session.correct_answerers)
+    else:
+        answerers = "正解者なし"
+    return f"楽曲名: ||{song.title} ({song.book})||\n正解者:\n{answerers}"
 
 
 def format_progress_text(session: GameSession, remaining: timedelta) -> str:
@@ -309,18 +370,19 @@ class GameService:
         )
 
     def _build_session_embed(self) -> discord.Embed:
-        """盤面画像とお題リストを1つにまとめた Embed を組み立てる。
+        """盤面画像・生成オプション・お題一覧を1つにまとめた Embed を組み立てる。
 
         Returns:
-            discord.Embed: お題リストを本文に持ち、盤面画像を添付参照する青色 Embed。
+            discord.Embed: オプションとお題一覧を本文に持ち、盤面画像を添付参照する青色 Embed。
 
         Raises:
             NoActiveSessionError: アクティブなセッションが無い場合。
         """
         session = self.session_manager.require_active()
-        embed = embeds.info(
-            format_topic_list(session.topics), title=SESSION_EMBED_TITLE
+        body = (
+            f"{format_session_options(session)}\n\n{format_panel_list(session.topics)}"
         )
+        embed = embeds.info(body, title=SESSION_EMBED_TITLE)
         embed.set_image(url=f"attachment://{BOARD_FILENAME}")
         return embed
 
@@ -410,17 +472,24 @@ class GameService:
             now: 開始時刻。残り時間計算の基準。
         """
         session = self.session_manager.require_active()
+        warning_minutes = self._settings.session_warning_minutes
         warning_seconds, end_seconds = timer_delays(
-            session, now=now, warning_minutes=self._settings.session_warning_minutes
+            session, now=now, warning_minutes=warning_minutes
         )
         if warning_seconds > 0:
             await asyncio.sleep(warning_seconds)
         if self.session_message is not None:
             await self.session_message.channel.send(
                 embed=embeds.warning(
-                    f"残り{self._settings.session_warning_minutes}分です。",
-                    title=WARNING_EMBED_TITLE,
+                    f"セッションの制限時間まで残り{warning_minutes}分です。\n"
+                    "まだ回答していない方はお早めに。",
+                    title=f"⏰ 残り時間: {warning_minutes}分",
                 )
             )
         await asyncio.sleep(max(end_seconds - max(warning_seconds, 0.0), 0.0))
+        # 制限時間終了時も手動 /session_end と同じ終了告知を盤面チャンネルへ送る。
+        if self.session_message is not None:
+            await self.session_message.channel.send(
+                embed=embeds.neutral(SESSION_END_MESSAGE, title=SESSION_END_TITLE)
+            )
         await self.end_session(archive_channel)

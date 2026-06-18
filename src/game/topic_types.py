@@ -45,6 +45,13 @@ class TypeInfo:
     value_formatter: ValueFormatter
 
 
+# お題説明の "play" 置換語に埋める表示文字列。PLAY のみ日本語化し FC/AC は表記を維持する。
+_PLAY_CONDITION_DISPLAY = {
+    PlayCondition.PLAY: "プレイ",
+    PlayCondition.FULL_COMBO: PlayCondition.FULL_COMBO.value,
+    PlayCondition.ALL_CHARMING: PlayCondition.ALL_CHARMING.value,
+}
+
 _SUM_TYPES = {
     TopicType.LEVEL_TOTAL,
     TopicType.RESULT_COMBO_TOTAL,
@@ -120,4 +127,4 @@ def format_description(
     if "value" in text:
         text = text.replace("value", format_value(topic_type, value))
     text = text.replace("set", str(required))
-    return text.replace("play", play_condition.value)
+    return text.replace("play", _PLAY_CONDITION_DISPLAY[play_condition])

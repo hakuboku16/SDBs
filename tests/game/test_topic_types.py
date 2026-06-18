@@ -44,4 +44,19 @@ def test_format_description_sum_without_value_token() -> None:
         required=40,
         play_condition=PlayCondition.PLAY,
     )
-    assert text == "playした譜面のレベルの合計が40"
+    # PLAY は「プレイ」と日本語表記する(FC/AC は表記を維持)。
+    assert text == "プレイした譜面のレベルの合計が40"
+
+
+def test_format_description_play_condition_display_variants() -> None:
+    # FC/AC は値そのまま、PLAY のみ日本語化する。
+    assert (
+        format_description(
+            topic_type=TopicType.LEVEL_TOTAL,
+            description="playした",
+            value=None,
+            required=1,
+            play_condition=PlayCondition.ALL_CHARMING,
+        )
+        == "ACした"
+    )

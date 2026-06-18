@@ -170,11 +170,11 @@ def test_generic_error_message_is_user_facing_japanese() -> None:
 from src.bot.game_service import format_archive_caption
 
 
-def _session_with_answerers(answerers: set[int]) -> GameSession:
-    """正解者集合だけ意味を持つ最小セッションを作る。
+def _session_with_answerers(answerers: list[int]) -> GameSession:
+    """正解者リストだけ意味を持つ最小セッションを作る。
 
     Args:
-        answerers: correct_answerers に入れるユーザー ID 集合。
+        answerers: correct_answerers に入れるユーザー ID リスト(正解順)。
 
     Returns:
         GameSession: 構築したセッション。
@@ -191,28 +191,44 @@ def _session_with_answerers(answerers: set[int]) -> GameSession:
     )
 
 
-def test_archive_caption_spoiler_tags_title_and_lists_answerers() -> None:
-    """曲名はネタバレ記法で隠し、正解者はメンション列挙する。"""
-    caption = format_archive_caption(_session_with_answerers({111, 222}))
-    assert caption == "隠し曲: ||Dream||\n正解者: <@111>、<@222>"
+def test_archive_caption_spoilers_title_with_book_and_lists_answerers_in_order() -> None:
+    """楽曲名+パック名(book)をネタバレ記法で隠し、正解者を正解順で列挙する。"""
+    caption = format_archive_caption(_session_with_answerers([111, 222]))
+    assert caption == "楽曲名: ||Dream (Vol.1A)||\n正解者:\n<@111>\n<@222>"
 
 
 def test_archive_caption_shows_none_when_no_answerers() -> None:
-    """正解者がいなければ「なし」と表示する。"""
-    caption = format_archive_caption(_session_with_answerers(set()))
-    assert caption == "隠し曲: ||Dream||\n正解者: なし"
+    """正解者がいなければ「正解者なし」と表示する。"""
+    caption = format_archive_caption(_session_with_answerers([]))
+    assert caption == "楽曲名: ||Dream (Vol.1A)||\n正解者:\n正解者なし"
 
 
-from src.bot.game_service import format_completed_topics, format_progress_text
+from src.bot.game_service import (
+    format_panel_list,
+    format_progress_text,
+    format_session_options,
+)
 
 
-def test_format_completed_topics_lists_panel_and_description() -> None:
-    """達成お題をパネル番号順に「パネルN: 説明」で列挙する。"""
+def test_format_panel_list_marks_completed_and_orders_by_panel() -> None:
+    """パネル番号順に達成は✅、未達成は⬜を付け、説明を次行に並べる。"""
     topics = [
-        _topic(3, progress=2, required=2, completed=True),
-        _topic(1, progress=1, required=1, completed=True),
+        _topic(2, progress=3, required=3, completed=True),
+        _topic(1, progress=1, required=2, completed=False),
     ]
-    assert format_completed_topics(topics) == "パネル1: 説明1\nパネル3: 説明3"
+    assert format_panel_list(topics) == (
+        "⬜ **パネル 1 (1/2)**\n説明1\n✅ **パネル 2 (3/3)**\n説明2"
+    )
+
+
+def test_format_session_options_lists_mosaic_with_pixels() -> None:
+    """オプションを箇条書きにし、モザイクは実効解像度 px を併記する。"""
+    session = _session_for_timer(datetime(2026, 6, 10, 12, 0, 0))
+    session.panel_count = 9
+    session.image_options = ImageOptions(rotate=90, grayscale=False, mosaic_px=None)
+    assert format_session_options(session) == (
+        "・パネル数:9\n・回転:有効\n・グレースケール:無効\n・モザイク:なし (300px)"
+    )
 
 
 def test_format_progress_text_shows_remaining_minutes_and_topics() -> None:

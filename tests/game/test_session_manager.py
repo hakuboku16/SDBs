@@ -128,24 +128,38 @@ def test_apply_report_progresses_and_reveals_panel() -> None:
     assert _active(manager).revealed_panels == {5}
 
 
+def test_apply_report_does_not_reveal_incomplete_topic() -> None:
+    manager = SessionManager()
+    topic = _topic(required=2, panel_no=5)
+    _started(manager, topics=[topic])
+    # 進捗は増えるが未達成なのでパネルは開示しない。
+    applied = manager.apply_report(_report())
+    assert applied == [topic]
+    assert topic.completed is False
+    assert _active(manager).revealed_panels == set()
+
+
 def test_apply_report_without_session_raises() -> None:
     manager = SessionManager()
     with pytest.raises(NoActiveSessionError):
         manager.apply_report(_report())
 
 
-def test_record_answer_correct_records_user() -> None:
+def test_record_answer_correct_records_user_in_order() -> None:
     manager = SessionManager()
     _started(manager, song=_song("Dream"))
     assert manager.record_answer(42, _song("Dream")) is True
-    assert _active(manager).correct_answerers == {42}
+    assert manager.record_answer(7, _song("Dream")) is True
+    # 重複正解は無視し、正解順を保つ。
+    assert manager.record_answer(42, _song("Dream")) is True
+    assert _active(manager).correct_answerers == [42, 7]
 
 
 def test_record_answer_wrong_does_not_record() -> None:
     manager = SessionManager()
     _started(manager, song=_song("Dream"))
     assert manager.record_answer(42, _song("Nine")) is False
-    assert _active(manager).correct_answerers == set()
+    assert _active(manager).correct_answerers == []
 
 
 def test_is_expired_and_remaining() -> None:

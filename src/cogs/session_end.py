@@ -5,6 +5,7 @@ from discord import app_commands
 
 from src.bot import embeds
 from src.bot.client import GameBot
+from src.bot.game_service import SESSION_END_MESSAGE, SESSION_END_TITLE
 from src.cogs._base import GameCog
 
 
@@ -30,7 +31,8 @@ class SessionEndCog(GameCog):
         game.cancel_timer()
         await game.end_session(archive_channel)
         await interaction.followup.send(
-            embed=embeds.success("セッションを終了しました。"), ephemeral=True
+            embed=embeds.neutral(SESSION_END_MESSAGE, title=SESSION_END_TITLE),
+            ephemeral=True,
         )
 
 

@@ -13,13 +13,15 @@ class Difficulty(str, Enum):
     EASY = "Easy"
     NORMAL = "Normal"
     HARD = "Hard"
+    EXTRA = "Extra"
 
 
 @dataclass(frozen=True)
 class Chart:
     """1 つの難易度に対する譜面情報。"""
 
-    level: int
+    # Extra 譜面はレベルが文字列(例 "L"/"Pain")の曲があり数値化できないため None を許容する。
+    level: int | None
     notes: int
 
 
@@ -132,7 +134,8 @@ class GameSession:
     started_at: datetime
     ends_at: datetime
     revealed_panels: set[int] = field(default_factory=set)
-    correct_answerers: set[int] = field(default_factory=set)
+    # 正解順をアーカイブで表示するため、集合ではなく申告順を保つリストで保持する。
+    correct_answerers: list[int] = field(default_factory=list)
 
     @property
     def grid_size(self) -> int:

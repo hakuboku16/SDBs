@@ -85,16 +85,18 @@ class SessionManager:
             report: プレイ申告 1 件。
 
         Returns:
-            list[Topic]: この申告で新たに達成したお題。
+            list[Topic]: この申告で進捗が増えた(該当した)お題。completed が True の
+                要素はこの申告で新規達成したお題を表す。
 
         Raises:
             NoActiveSessionError: アクティブなセッションが存在しない場合。
         """
         session = self.require_active()
-        newly_completed = match_play_report(report, session.topics)
-        for topic in newly_completed:
-            session.revealed_panels.add(topic.panel_no)
-        return newly_completed
+        applied = match_play_report(report, session.topics)
+        for topic in applied:
+            if topic.completed:
+                session.revealed_panels.add(topic.panel_no)
+        return applied
 
     def record_answer(self, user_id: int, song: Song) -> bool:
         """隠し曲の当てを照合し、正解なら回答者を記録する。
@@ -112,8 +114,9 @@ class SessionManager:
         session = self.require_active()
         # 隠し曲との一致は解決済み Song の title で判定する。部分一致解決は cog の責務。
         correct = song.title == session.hidden_song.title
-        if correct:
-            session.correct_answerers.add(user_id)
+        # 正解順を保つため、初回正解時のみ申告順で末尾に追加する。
+        if correct and user_id not in session.correct_answerers:
+            session.correct_answerers.append(user_id)
         return correct
 
     def is_expired(self, now: datetime) -> bool:
