@@ -2,7 +2,8 @@ FROM python:3.13-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    UV_LINK_MODE=copy
+    UV_LINK_MODE=copy \
+    PATH="/app/.venv/bin:$PATH"
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
@@ -15,4 +16,5 @@ COPY src ./src
 
 RUN uv sync --no-dev
 
-CMD ["uv", "run", "python", "-m", "src.main"]
+# ビルド時に同期済みの .venv を直接使い、起動時の再同期(再ダウンロード)を避ける
+CMD ["python", "-m", "src.main"]
